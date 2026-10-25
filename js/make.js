@@ -2,14 +2,21 @@
 // right temperature (hold the kettle, let go at the number), brew for the right minutes, strain, add syrup by the pump,
 // pour to the line in ml, ice by the scoop, shake, seal. Every action is written down, then judged against the recipe:
 // the right thing, the right amount, in the right order (steps in one box may go any way round), nothing extra.
-import { ITEMS } from './data.js?v=2';
-import { cup, INK } from './art.js?v=2';
+import { ITEMS } from './data.js?v=3';
+import { cup, INK } from './art.js?v=3';
 
 const SWEET = [0, 0.3, 0.5, 0.7, 1], ICE = [0, 0.3, 0.7, 1];
-export const SHELVES = {
-  drink: { leaf: ['black', 'green', 'oolong'], jar: ['pearl', 'bpearl', 'sugar', 'ice', 'lemon', 'passion', 'taro'], pour: ['tea', 'milk', 'creamer', 'melon', 'cold'], do: ['strain', 'swirl', 'smear'] },
-  food: { leaf: ['noodle', 'braise'], jar: ['tofu', 'kelp', 'egg', 'sesame', 'soy', 'vinegar', 'garlic', 'cucumber', 'scallion'], pour: ['juice'], do: ['drain', 'cut', 'toss'] },
-};
+// what is on the shelves for this item: every base of its kind (you must know which one), the things the recipe
+// needs, and a few others that also belong in this kitchen, so you still have to know what goes in
+const hsh = (str, k) => { let h = 2166136261 ^ k; for (let i = 0; i < str.length; i++) h = Math.imul(h ^ str.charCodeAt(i), 16777619); return (h >>> 0) / 4294967296; };
+export function shelvesFor(p, recipe) {
+  const K = p.kind === 'food' ? 'food' : 'drink', fits = (it) => ITEMS[it].for === K || ITEMS[it].for === 'both';
+  const all = (shelf) => Object.keys(ITEMS).filter((it) => ITEMS[it].shelf === shelf && fits(it));
+  const need = (shelf) => [...new Set(recipe.filter((s) => s.item && ITEMS[s.item] && ITEMS[s.item].shelf === shelf).map((s) => s.item))];
+  const pick = (shelf, extra) => { const n = need(shelf), others = all(shelf).filter((it) => !n.includes(it)).sort((a, b) => hsh(p.id + a, 1) - hsh(p.id + b, 1)); return [...n, ...others.slice(0, extra)].sort((a, b) => hsh(p.id + a, 2) - hsh(p.id + b, 2)); };
+  const always = K === 'drink' ? ['sugar', 'ice'] : [];
+  return { leaf: K === 'drink' ? all('leaf') : all('leaf'), jar: [...new Set([...pick('jar', K === 'drink' ? 4 : 5), ...always])], pour: pick('pour', 2), do: pick('do', 2) };
+}
 const CUP = 700, HEAT_RATE = 15, ROOM_T = 25;
 const steepMax = (s) => Math.max(5, (s ? s.min : 8) * 1.6);
 const r1 = (v) => Math.round(v * 10) / 10;
@@ -20,7 +27,7 @@ export function recipeFor(p, special) {
   for (const s0 of p.steps) {
     const s = { ...s0 };
     if (special && s.kind === 'scoop') {
-      if (s.item === 'sugar' && special.sweet !== undefined) s.n = Math.round(s.n * SWEET[special.sweet]);
+      if ((s.item === 'sugar' || s.item === 'honey') && special.sweet !== undefined) s.n = Math.round(s.n * SWEET[special.sweet]);
       if (s.item === 'ice' && special.ice !== undefined) s.n = Math.round(s.n * ICE[special.ice]);
       if (s.n === 0) { if (!s.w) headGone = true; continue; }
     }
@@ -52,7 +59,7 @@ export function judge(recipe, acts, T, lang, kind = 'drink') {
     if (st.kind === 'heat') { s = near(a.v, st.target, st.tol); if (s < 0.95) msgs.push(a.v > st.target ? J.hot(Math.round(a.v), st.target) : st.target >= 100 && kind === 'food' ? J.boil(Math.round(a.v)) : J.cool(Math.round(a.v), st.target)); }
     else if (st.kind === 'steep') {
       s = near(a.v, st.min, st.tol);
-      if (s < 0.95) { const v = r1(a.v), hi = a.v > st.min; msgs.push(st.item === 'noodle' ? (hi ? J.mushy(v, st.min) : J.raw(v, st.min)) : st.item === 'braise' ? (hi ? J.salty(v, st.min) : J.coldFood(v, st.min)) : hi ? J.bitter(v, st.min) : J.weak(v, st.min)); }
+      if (s < 0.95) { const v = r1(a.v), hi = a.v > st.min, I = ITEMS[st.item]; msgs.push(st.item === 'noodle' ? (hi ? J.mushy(v, st.min) : J.raw(v, st.min)) : st.item === 'braise' ? (hi ? J.salty(v, st.min) : J.coldFood(v, st.min)) : I.over ? (hi ? J.cookLong(v, st.min, I.over[lang]) : J.cookShort(v, st.min, I.under[lang])) : hi ? J.bitter(v, st.min) : J.weak(v, st.min)); }
     } else if (st.kind === 'pour') { s = near(a.v, st.ml, st.tol); if (s < 0.95) msgs.push(a.v > st.ml ? J.pourMore(nm(st.item), Math.round(a.v), st.ml) : J.pourLess(nm(st.item), Math.round(a.v), st.ml)); }
     else if (st.kind === 'scoop') { const d = Math.abs(a.n - st.n); s = [1, 0.6, 0.25][d] ?? 0; if (d) msgs.push(a.n > st.n ? J.scoopMore(nm(st.item), a.n, st.n, un(st.item)) : J.scoopLess(nm(st.item), a.n, st.n, un(st.item))); }
     else if (st.kind === 'shake') { s = Math.max(0, 1 - Math.abs(a.n - st.n) / Math.max(4, st.n * 0.8)); if (s < 0.9) msgs.push(a.n > st.n ? J.shakeMore(a.n, st.n) : J.shakeLess(a.n, st.n)); }
@@ -69,7 +76,7 @@ export function describe(s, T, lang, food) {
   const n = ITEMS[s.item] ? ITEMS[s.item][lang] : '';
   if (s.kind === 'pick') return T.d.pick(n);
   if (s.kind === 'heat') return T.d.heat(s.target);
-  if (s.kind === 'steep') return s.item === 'noodle' ? T.d.noodle(s.min) : s.item === 'braise' ? T.d.braise(s.min) : T.d.brew(s.min);
+  if (s.kind === 'steep') return ITEMS[s.item].boil ? T.d.noodle(s.min, n) : s.item === 'braise' ? T.d.braise(s.min) : ITEMS[s.item].for === 'food' ? T.d.cook(n, s.min) : T.d.brew(s.min);
   if (s.kind === 'scoop') return T.d.scoop(n, s.n, ITEMS[s.item].unit ? ITEMS[s.item].unit[lang] : '');
   if (s.kind === 'pour') return T.d.pour(n, s.ml);
   if (s.kind === 'do') return n;
@@ -84,7 +91,7 @@ export const mix = (parts) => { const tot = parts.reduce((s, p) => s + p[1], 0) 
 
 // the counter screen; resolves with { score, msgs } when served, or null if closed
 export function make(host, p, T, lang, special) {
-  const recipe = recipeFor(p, special), food = p.kind === 'food', K = food ? 'food' : 'drink', SH = SHELVES[K];
+  const recipe = recipeFor(p, special), food = p.kind === 'food', K = food ? 'food' : 'drink', SH = shelvesFor(p, recipe);
   const groups = []; recipe.forEach((s, i) => { if (i === 0 || !s.w) groups.push([]); groups[groups.length - 1].push(s); });
   const toolBtn = (attr, it) => `<button class="tool" ${attr}="${it}"><i style="background:${ITEMS[it].color}"></i>${ITEMS[it][lang]}</button>`;
   return new Promise((done) => {
@@ -123,7 +130,7 @@ export function make(host, p, T, lang, special) {
       if (hold) return;
       if (kind === 'steep' && !st.base) { say(T.needBase); return; }
       if (kind === 'pour' && item === 'tea' && !(st.base && ITEMS[st.base].brew && st.brewed > 0.3)) { say(T.needTea); return; }
-      if (kind === 'pour' && item === 'juice' && st.base !== 'braise') { say(T.needPot); return; }
+      if (kind === 'pour' && item === 'juice' && recipe.some((r) => r.item === 'braise') && st.base !== 'braise') { say(T.needPot); return; }
       if (kind === 'pour' && st.pourStart[item] === undefined) st.pourStart[item] = st.vol;
       hold = { kind, item: kind === 'heat' ? 'water' : kind === 'steep' ? st.base : item, v: 0 };
       meter = kind === 'heat' || kind === 'steep' ? { kind, t: 0 } : null;
@@ -170,7 +177,7 @@ export function make(host, p, T, lang, special) {
       const sx = shakeT > 0 ? Math.sin(time * 50) * 8 : 0; shakeT = Math.max(0, shakeT - dt);
       kettle(g, 52, 120, st.temp, time, hold && hold.kind === 'heat');
       pot(g, 70, 244, time);
-      if (food) bowl(g, 230 + sx, 244, time); else drinkCup(g, 232 + sx, 246);
+      if (food) { if (p.id === 'noodle' || p.id === 'braise') bowl(g, 230 + sx, 244, time); else vessel(g, 230 + sx, 244, time); } else drinkCup(g, 232 + sx, 246);
       // the meters: temperature or minutes, with the green zone
       if (meter) {
         const heat = meter.kind === 'heat', v = heat ? st.temp : st.brewed, lo = heat ? ROOM_T : 0, hi = heat ? 100 : steepMax(sStep), tgt = heat ? tStep : sStep;
@@ -211,14 +218,50 @@ export function make(host, p, T, lang, special) {
         if (st.strained) { g.fillStyle = '#5a8a4a'; g.font = '800 13px Nunito, sans-serif'; g.textAlign = 'center'; g.fillText('✓', x, y - 66); }
         return;
       }
+      if (st.base === 'fryer' || st.base === 'griddle' || st.base === 'steamer') { cooker(g, x, y, time); return; }
       // a steel pot on the fire: noodles in boiling water, or the braising pot with the pieces in it
       g.fillStyle = '#6a6a70'; g.fillRect(x - 36, y - 2, 72, 6);
       g.beginPath(); g.moveTo(x - 36, y - 50); g.lineTo(x + 36, y - 50); g.lineTo(x + 32, y); g.lineTo(x - 32, y); g.closePath(); g.fillStyle = '#b8b8c0'; g.fill(); g.strokeStyle = INK; g.lineWidth = 2; g.stroke();
       g.fillStyle = st.base === 'braise' ? '#4a2214' : 'rgba(200,225,235,0.95)'; g.beginPath(); g.ellipse(x, y - 50, 36, 8, 0, 0, 7); g.fill(); g.stroke();
       if (st.base === 'braise') { let k = 0; ['tofu', 'kelp', 'egg'].forEach((it) => { for (let i = 0; i < (st.scoops[it] || 0) && !st.did.cut; i++, k++) { g.fillStyle = ITEMS[it].color; g.beginPath(); g.ellipse(x - 24 + (k % 5) * 12, y - 51 + (k % 2) * 3, it === 'egg' ? 6 : 5, 4, 0, 0, 7); g.fill(); } }); }
-      else if (!st.drained) { g.strokeStyle = '#f0dc9a'; g.lineWidth = 2; for (let i = 0; i < 6; i++) { g.beginPath(); g.arc(x - 18 + i * 7, y - 50, 6, 3.4, 5.9); g.stroke(); } }
+      else if (!st.drained) { if (st.base === 'dpot') { let k = 0; for (const [it, n] of Object.entries(st.scoops)) { if (ITEMS[it].shelf !== 'jar' || it === 'splash' || it === 'ginger') continue; for (let i = 0; i < Math.min(8, n); i++, k++) { g.fillStyle = ITEMS[it].color; g.strokeStyle = INK; g.lineWidth = 1; g.beginPath(); g.ellipse(x - 24 + (k % 6) * 10, y - 51 + (k % 2) * 3, 5, 3.4, -0.3, 0, 7); g.fill(); g.stroke(); } } } else { g.strokeStyle = ITEMS[st.base].color; g.lineWidth = 2; for (let i = 0; i < 6; i++) { g.beginPath(); g.arc(x - 18 + i * 7, y - 50, 6, 3.4, 5.9); g.stroke(); } } }
       const boil = st.base === 'braise' ? st.brewed > 0 : st.temp >= 96;
       if (boil || (hold && hold.kind === 'steep')) { g.fillStyle = 'rgba(255,255,255,0.6)'; for (let i = 0; i < 5; i++) { const ph = (time * 1.4 + i / 5) % 1; g.beginPath(); g.arc(x - 24 + i * 12, y - 56 - ph * 30, 3 + ph * 6, 0, 7); g.globalAlpha = 1 - ph; g.fill(); } g.globalAlpha = 1; }
+    }
+    // the fryer (golden oil), the griddle (a hot iron plate), the steamer (bamboo with steam); what is cooking sits on it
+    function cooker(g, x, y, time) {
+      const cooking = Object.entries(st.scoops).filter(([it]) => ITEMS[it].shelf === 'jar' && !cookedOff()), on = hold && hold.kind === 'steep';
+      if (st.base === 'fryer') { g.beginPath(); g.moveTo(x - 38, y - 44); g.lineTo(x + 38, y - 44); g.lineTo(x + 34, y); g.lineTo(x - 34, y); g.closePath(); g.fillStyle = '#8a8a90'; g.fill(); g.strokeStyle = INK; g.lineWidth = 2; g.stroke(); g.fillStyle = '#d8a030'; g.beginPath(); g.ellipse(x, y - 44, 38, 8, 0, 0, 7); g.fill(); g.stroke(); }
+      else if (st.base === 'griddle') { g.fillStyle = '#3a3a40'; g.beginPath(); g.roundRect(x - 46, y - 20, 92, 18, 4); g.fill(); g.strokeStyle = INK; g.lineWidth = 2; g.stroke(); g.fillStyle = '#5a5a62'; g.beginPath(); g.ellipse(x, y - 20, 46, 9, 0, 0, 7); g.fill(); g.stroke(); }
+      else { for (let k = 0; k < 2; k++) { g.fillStyle = k ? '#d8b070' : '#c8a060'; g.beginPath(); g.ellipse(x, y - 14 - k * 22, 38, 9, 0, 0, 7); g.fill(); g.strokeStyle = INK; g.lineWidth = 2; g.stroke(); g.fillRect(x - 38, y - 36 + k * 0, 76, 22); g.strokeRect(x - 38, y - 36, 76, 22); } }
+      const ty = st.base === 'fryer' ? y - 46 : st.base === 'griddle' ? y - 22 : y - 40; let k = 0;
+      for (const [it, n] of cooking) for (let i = 0; i < Math.min(8, n); i++, k++) { const px = x - 28 + (k % 6) * 11, py = ty - Math.floor(k / 6) * 6; g.fillStyle = mix([[ITEMS[it].color, 1], ['#a8642a', Math.min(0.6, st.brewed * 0.12)]]); g.strokeStyle = INK; g.lineWidth = 1; g.beginPath(); g.ellipse(px, py, 6, 4, 0, 0, 7); g.fill(); g.stroke(); }
+      if (on || st.brewed > 0) { for (let i = 0; i < 5; i++) { const ph = (time * 1.3 + i / 5) % 1; g.fillStyle = st.base === 'fryer' ? 'rgba(255,230,150,0.7)' : 'rgba(255,255,255,0.6)'; g.globalAlpha = (1 - ph) * (on ? 1 : 0.4); g.beginPath(); g.arc(x - 26 + i * 13, ty - 6 - ph * 30, 2 + ph * 5, 0, 7); g.fill(); } g.globalAlpha = 1; }
+    }
+    // once the cooking is done (cut, drained, rolled, or the time is up) the pieces leave the pot for the plate
+    const cookedOff = () => st.did.cut || st.did.drain || st.did.roll || st.drained || (sStep && st.brewed >= sStep.min * 0.8 && !(hold && hold.kind === 'steep'));
+    // anything else: the bowl or plate it is served in, with what has gone in so far
+    function vessel(g, x, y, time) {
+      const kind = p.dish, cook = st.base && ['fryer', 'griddle', 'steamer', 'dpot'].includes(st.base), parts = Object.entries(st.scoops).filter(([it]) => ITEMS[it].shelf === 'jar' && it !== 'splash' && (!cook || cookedOff() || !['fryer', 'griddle', 'steamer', 'dpot'].includes(st.base) || recipe.findIndex((r) => r.item === it) > recipe.findIndex((r) => r.kind === 'steep')));
+      const pours = st.pours.slice(); if (hold && hold.kind === 'pour' && hold.v > 0) pours.push([hold.item, hold.v]);
+      const liquid = pours.reduce((a, [, v]) => a + v, 0);
+      g.fillStyle = 'rgba(60,40,20,0.25)'; g.beginPath(); g.ellipse(x, y + 2, 70, 11, 0, 0, 7); g.fill();
+      if (kind === 'steamer') { g.fillStyle = '#c8a060'; g.beginPath(); g.ellipse(x, y - 14, 66, 16, 0, 0, 7); g.fill(); g.strokeStyle = INK; g.lineWidth = 2; g.stroke(); }
+      else if (kind === 'plate' || kind === 'braise') { g.fillStyle = '#f4f0e8'; g.strokeStyle = INK; g.lineWidth = 2; g.beginPath(); g.ellipse(x, y - 12, 74, 20, 0, 0, 7); g.fill(); g.stroke(); g.strokeStyle = '#3a6a9a'; g.lineWidth = 1.5; g.beginPath(); g.ellipse(x, y - 12, 62, 15, 0, 0, 7); g.stroke(); }
+      else { g.beginPath(); g.moveTo(x - 66, y - 46); g.quadraticCurveTo(x - 60, y, x, y); g.quadraticCurveTo(x + 60, y, x + 66, y - 46); g.closePath(); g.fillStyle = kind === 'dessert' ? '#e8f0f4' : '#f4f0e8'; g.fill(); g.strokeStyle = INK; g.lineWidth = 2; g.stroke(); g.strokeStyle = '#3a6a9a'; g.beginPath(); g.moveTo(x - 60, y - 30); g.quadraticCurveTo(x, y - 18, x + 60, y - 30); g.stroke(); g.fillStyle = '#ece4d0'; g.strokeStyle = INK; g.beginPath(); g.ellipse(x, y - 46, 66, 14, 0, 0, 7); g.fill(); g.stroke(); }
+      const top = kind === 'plate' || kind === 'braise' ? y - 14 : kind === 'steamer' ? y - 18 : y - 46;
+      if (liquid > 0) { g.fillStyle = mix(pours.map(([it, v]) => [ITEMS[it].color, v])); g.globalAlpha = 0.85; g.beginPath(); g.ellipse(x, top, Math.min(62, 18 + liquid / 6), Math.min(12, 4 + liquid / 30), 0, 0, 7); g.fill(); g.globalAlpha = 1; }
+      if (st.did.shave) { g.fillStyle = '#f8fcff'; g.strokeStyle = 'rgba(160,190,210,0.8)'; g.lineWidth = 1.5; g.beginPath(); g.ellipse(x, top - 10, 48, 26, 0, Math.PI, 0); g.fill(); g.stroke(); }
+      if (st.drained && st.base && ITEMS[st.base].boil && st.base !== 'dpot') { g.strokeStyle = st.did.toss && p.dc ? p.dc : ITEMS[st.base].color; g.lineWidth = 3; for (let i = 0; i < 12; i++) { g.beginPath(); g.arc(x - 40 + i * 7, top - 2 + (i % 3) * 2, 9, 3.3, 6); g.stroke(); } }
+      let k = 0;
+      for (const [it, n] of parts) { const I = ITEMS[it], cnt = Math.min(it === 'rice' ? 1 : 10, n * (st.did.cut && !['scallion', 'cilantro', 'ginger', 'garlic'].includes(it) ? 2 : 1));
+        for (let i = 0; i < cnt; i++, k++) { const a = k * 2.4, r = 8 + (k % 7) * 6, px = x + Math.cos(a) * r * 1.6, py = top - 4 + Math.sin(a) * r * 0.35 - (st.did.shave ? 14 : 0);
+          g.fillStyle = st.did.toss && p.dc && !['cucumber', 'scallion', 'cilantro', 'sprouts', 'greens'].includes(it) ? p.dc : I.color; g.strokeStyle = INK; g.lineWidth = 1;
+          if (it === 'rice') { g.beginPath(); g.ellipse(x, top - 6, 40, 12, 0, Math.PI, 0); g.fill(); g.stroke(); continue; }
+          if (['scallion', 'cilantro', 'shallot', 'garlic', 'ginger', 'peanut', 'floss'].includes(it)) { g.fillRect(px, py, 3, 3); continue; }
+          g.beginPath(); g.ellipse(px, py, st.did.cut ? 6 : 8, st.did.cut ? 4 : 5.5, a, 0, 7); g.fill(); g.stroke(); } }
+      if (st.did.roll) { g.fillStyle = '#f0d080'; g.strokeStyle = INK; g.lineWidth = 1.5; for (let i = 0; i < (st.did.cut ? 5 : 1); i++) { g.beginPath(); g.roundRect(x - 50 + i * (st.did.cut ? 21 : 0), top - 12, st.did.cut ? 18 : 100, 18, 8); g.fill(); g.stroke(); } }
+      if (st.drained || st.brewed > 0) { g.fillStyle = 'rgba(255,255,255,0.45)'; for (let i = 0; i < 3; i++) { const ph = (time * 0.6 + i / 3) % 1; g.beginPath(); g.ellipse(x - 14 + i * 14, top - 18 - ph * 30, 5 + ph * 6, 3 + ph * 4, 0, 0, 7); g.globalAlpha = (1 - ph) * (p.cat === 'dessert' && !p.id.endsWith('_hot') && p.id !== 'ice_grass' ? 0 : 1); g.fill(); } g.globalAlpha = 1; }
     }
     function drinkCup(g, x, y) {
       // what is in it: poured layers (unshaken, they sit in the order poured), one colour once shaken
@@ -228,7 +271,7 @@ export function make(host, p, T, lang, special) {
       if (st.shakes > 0 && parts.length) layers = [mix(parts.map(([it, v]) => [colOf(it), v * (it === 'cold' ? 0.4 : it === 'creamer' ? 3 : 1)]))];
       else layers = parts.length ? parts.map(([it]) => colOf(it)).reverse() : ['rgba(0,0,0,0)'];
       const fill = Math.min(1, st.vol / CUP);
-      cup(g, x, y, { layers, pearls: !!(st.scoops.pearl || st.scoops.bpearl), ice: Math.min(5, st.scoops.ice || 0), stripes: st.did.swirl && st.scoops.bpearl ? '#6e3c14' : st.did.smear && st.scoops.taro ? '#a888c0' : null, taroBottom: !!(st.scoops.taro && !st.did.smear), seeds: !!st.scoops.passion, lemon: !!st.scoops.lemon, noStraw: true }, 5, fill);
+      cup(g, x, y, { layers, tops: ['pearl', 'bpearl', 'boba', 'coconut', 'grass', 'pudding', 'redbean', 'taroball', 'aiyu', 'agar'].filter((t) => st.scoops[t]).map((t) => (t === 'bpearl' ? 'pearl' : t)), fruit: ['grapefruit', 'kumquat', 'pineapple', 'mango', 'lychee', 'peach', 'strawberry'].find((f) => st.scoops[f]) || (st.pours.some(([i]) => i === 'orange') ? 'orange' : null), foam: st.pours.some(([i]) => i === 'foam'), ice: Math.min(5, st.scoops.ice || 0), stripes: st.did.swirl && st.scoops.bpearl ? '#6e3c14' : st.did.smear && st.scoops.taro ? '#a888c0' : null, taroBottom: !!(st.scoops.taro && !st.did.smear), seeds: !!st.scoops.passion, lemon: !!st.scoops.lemon, noStraw: true }, 5, fill);
       const pl = pourLine();
       if (pl) {
         const h = 40 * 5, top = y - h, ly = top + h * (1 - 0.86 * Math.min(1, pl.at / CUP));

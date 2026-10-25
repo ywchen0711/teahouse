@@ -3,7 +3,7 @@
 // warm vignette over everything, lantern light, hearts and confetti when someone is happy. The shop opens onto a
 // little street at the bottom: a red-brick pavement and an alley road where people and scooters go by.
 // All drawn on a canvas, nothing loaded.
-import { WALLS, FLOORS, PRODUCTS } from './data.js?v=2';
+import { WALLS, FLOORS, PRODUCTS } from './data.js?v=3';
 
 export const INK = '#4a3426';
 const rnd = (a, b) => a + Math.random() * (b - a);
@@ -136,7 +136,24 @@ export function frontWall(g, st, t, ring) {
   ell(g, b - 3 + sw * 0.3, H - 46, 5, 5); path(g, 'rgba(200,230,250,0.8)', INK, 1); g.strokeStyle = '#c83a2a'; g.beginPath(); g.moveTo(b - 3 + sw * 0.3, H - 41); g.lineTo(b - 3 + sw, H - 30); g.stroke(); g.fillStyle = '#f4ead0'; g.fillRect(b - 6 + sw, H - 30, 7, 10);
 }
 // things standing out on the pavement: a menu board and a plant by the door
-export function streetProps(st) { const H = roomH(st.size); return [{ id: 'aboard', x: DOOR_X + 96, y: H + 40 }, { id: 'plant', x: DOOR_X - 80, y: H + 40 }]; }
+export function streetProps(st) { const H = roomH(st.size); return [{ id: 'aboard', x: DOOR_X + 96, y: H + 40 }, { id: 'plant', x: DOOR_X - 80, y: H + 40 }, ...(st.baskets || []).slice(-4).map((b, i) => ({ id: 'basket', name: b.from, x: DOOR_X + 200 + i * 60, y: H + 46 }))]; }
+// an opening flower basket (花籃) from a friend: a tall stand of flowers with a red ribbon carrying their name
+export function basket(g, x, y, name, t) {
+  g.fillStyle = 'rgba(40,20,10,0.25)'; ell(g, x, y + 2, 20, 5); g.fill();
+  g.strokeStyle = INK; g.lineWidth = 2; for (const dx of [-12, 12]) { g.beginPath(); g.moveTo(x + dx, y); g.lineTo(x + dx * 0.4, y - 56); g.stroke(); }
+  g.beginPath(); g.moveTo(x - 16, y - 58); g.lineTo(x + 16, y - 58); g.lineTo(x + 10, y - 46); g.lineTo(x - 10, y - 46); g.closePath(); path(g, '#c8a060', INK, 1.5);
+  const cols = ['#e84a5a', '#f0c040', '#f4f0e8', '#e88aa8', '#f08030'];
+  for (let k = 0; k < 11; k++) { const a = Math.PI + (k / 10) * Math.PI, fx = x + Math.cos(a) * 20, fy = y - 64 + Math.sin(a) * 18 + Math.sin(t * 1.5 + k) * 0.6; ell(g, fx, fy, 6, 6); path(g, cols[k % 5], INK, 1); g.fillStyle = '#f8e070'; ell(g, fx, fy, 1.8, 1.8); g.fill(); }
+  g.fillStyle = '#5a9a4a'; for (let k = 0; k < 4; k++) { g.beginPath(); g.ellipse(x - 14 + k * 9, y - 56, 4, 8, -0.6 + k * 0.4, 0, 7); g.fill(); }
+  g.fillStyle = '#c8302a'; g.fillRect(x - 5, y - 46, 10, 40); g.fillStyle = '#f8e8a0'; g.font = '700 8px "Noto Sans TC", sans-serif'; g.textAlign = 'center';
+  [...String(name || '').slice(0, 4)].forEach((ch, k) => g.fillText(ch, x, y - 37 + k * 9));
+}
+// a name over a friend who is visiting
+export function nameTag(g, x, y, name, self) {
+  g.font = '800 11px Nunito, "Noto Sans TC", sans-serif'; const w = Math.min(110, g.measureText(name).width + 14);
+  g.fillStyle = self ? '#e8a85a' : '#5a8a4a'; g.strokeStyle = INK; g.lineWidth = 1.4; rrect(g, x - w / 2, y, w, 16, 8); g.fill(); g.stroke();
+  g.fillStyle = '#fffaf0'; g.textAlign = 'center'; g.fillText(name, x, y + 12, w - 6);
+}
 export function aboard(g, x, y, st) {
   g.fillStyle = 'rgba(40,20,10,0.25)'; ell(g, x, y + 2, 24, 5); g.fill();
   g.strokeStyle = INK; g.lineWidth = 2; g.beginPath(); g.moveTo(x - 18, y); g.lineTo(x - 12, y - 50); g.lineTo(x + 12, y - 50); g.lineTo(x + 18, y); g.stroke();
@@ -319,34 +336,69 @@ export function staffLook(k) { return { ...makeLook(1000 + k * 7), top: '#f4f0e8
 export function staff(g, x, y, k, o = {}) { person(g, x, y, staffLook(k), { ...o, scale: 0.95 }); }
 
 // ------------------------------------------------------------------ cups, plates
+// toppings as they look in the cup: dark pearls, big boba, clear coconut cubes, black grass jelly, a whole pudding…
+const TOPLOOK = { pearl: ['ball', '#2a1810', 2.6], boba: ['ball', '#1e120a', 3.4], coconut: ['cube', 'rgba(250,250,235,0.85)', 3], grass: ['cube', '#2a2420', 3.4], pudding: ['pudding', '#f0c860', 0], redbean: ['bean', '#7a2020', 1.6], taroball: ['cube', '#c8a0c8', 3], aiyu: ['cube', 'rgba(240,224,150,0.8)', 3.4], agar: ['ball', 'rgba(235,245,248,0.85)', 2.6] };
+const FRUITLOOK = { lemon: '#f4e070', orange: '#f0a030', grapefruit: '#e87a6a', kumquat: '#f0a020', pineapple: '#f0d050', mango: '#f0b030', lychee: '#f8f0e0', peach: '#f0a888', strawberry: '#d83a4a', plum: '#8a3a2a', honeylemon: '#f4e070' };
 export function cup(g, x, y, p, sc = 1, fill = 1) {
-  const w = 22 * sc, h = 40 * sc, top = y - h, stripeC = p.stripes === true ? '#6e3c14' : p.stripes;
+  const w = 22 * sc, h = 40 * sc, top = y - h, stripeC = p.stripes === true ? '#6e3c14' : p.stripes, tops = p.tops || (p.pearls ? ['pearl'] : []);
   g.save();
   g.beginPath(); g.moveTo(x - w / 2, top); g.lineTo(x + w / 2, top); g.lineTo(x + w * 0.4, y); g.lineTo(x - w * 0.4, y); g.closePath(); g.save(); g.clip();
   g.fillStyle = 'rgba(240,248,250,0.5)'; g.fillRect(x - w, top, w * 2, h);
   const lv = top + h * (1 - 0.86 * fill), L = p.layers || ['#c8925a'];
   if (fill > 0) { const lh = (y - lv) / L.length; L.forEach((c, i) => { g.fillStyle = c; g.fillRect(x - w, lv + i * lh, w * 2, lh + 1); }); }
+  if (p.foam && fill > 0.3) { g.fillStyle = '#fff8ec'; g.fillRect(x - w, lv, w * 2, h * 0.16); g.fillStyle = 'rgba(230,210,170,0.5)'; g.fillRect(x - w, lv + h * 0.15, w * 2, 1.5 * sc); }
   if (stripeC) { g.strokeStyle = stripeC; g.globalAlpha = 0.75; g.lineWidth = 2.5 * sc; for (let k = 0; k < 5; k++) { g.beginPath(); g.moveTo(x - w * 0.55 + k * w * 0.26, top + h * 0.15); g.quadraticCurveTo(x - w * 0.4 + k * w * 0.26, top + h * 0.55, x - w * 0.5 + k * w * 0.26, y); g.stroke(); } g.globalAlpha = 1; }
   if (p.taroBottom) { g.fillStyle = '#a888c0'; g.fillRect(x - w, y - 9 * sc, w * 2, 9 * sc); }
-  if (p.pearls) { g.fillStyle = '#2a1810'; for (let k = 0; k < 9; k++) { ell(g, x - w * 0.35 + (k % 5) * w * 0.17, y - 3 * sc - Math.floor(k / 5) * 4.5 * sc, 2.6 * sc, 2.6 * sc); g.fill(); } g.fillStyle = 'rgba(255,255,255,0.35)'; for (let k = 0; k < 5; k++) { ell(g, x - w * 0.36 + k * w * 0.17, y - 4 * sc, 0.8 * sc, 0.8 * sc); g.fill(); } }
-  if (p.seeds && fill > 0) { g.fillStyle = '#3a2a10'; for (let k = 0; k < 12; k++) { ell(g, x + (hash(k) - 0.5) * w * 0.7, lv + hash(k, 2) * (y - lv), 1.2 * sc, 1.2 * sc); g.fill(); } }
-  if (p.lemon && fill > 0) { ell(g, x + w * 0.12, lv + 6 * sc, 6 * sc, 6 * sc); path(g, '#f4e070', '#c8a830', 1); g.strokeStyle = 'rgba(200,170,40,0.7)'; g.lineWidth = 0.8; for (let k = 0; k < 6; k++) { g.beginPath(); g.moveTo(x + w * 0.12, lv + 6 * sc); g.lineTo(x + w * 0.12 + Math.cos(k) * 5 * sc, lv + 6 * sc + Math.sin(k) * 5 * sc); g.stroke(); } }
+  tops.forEach((t, ti) => {
+    const [shape, c, r] = TOPLOOK[t] || TOPLOOK.pearl, base = y - 3 * sc - ti * 8 * sc;
+    if (shape === 'pudding') { rrect(g, x - w * 0.22, base - 9 * sc, w * 0.44, 9 * sc, 2 * sc); path(g, c, 'rgba(120,70,20,0.6)', 1); g.fillStyle = '#8a4a14'; g.fillRect(x - w * 0.22, base - 9 * sc, w * 0.44, 2 * sc); return; }
+    for (let k = 0; k < 9; k++) {
+      const px = x - w * 0.35 + (k % 5) * w * 0.17 + (Math.floor(k / 5) ? w * 0.08 : 0), py = base - Math.floor(k / 5) * (r * 1.7) * sc;
+      g.fillStyle = c; if (shape === 'cube') g.fillRect(px - r * sc * 0.8, py - r * sc * 0.8, r * sc * 1.6, r * sc * 1.6); else { ell(g, px, py, r * sc * (shape === 'bean' ? 1.2 : 1), r * sc); g.fill(); }
+      if (shape === 'ball' && k < 5) { g.fillStyle = 'rgba(255,255,255,0.35)'; ell(g, px - 0.8 * sc, py - 0.8 * sc, 0.8 * sc, 0.8 * sc); g.fill(); }
+    }
+  });
+  if ((p.seeds || p.fruit === 'passion') && fill > 0) { g.fillStyle = '#3a2a10'; for (let k = 0; k < 12; k++) { ell(g, x + (hash(k) - 0.5) * w * 0.7, lv + hash(k, 2) * (y - lv), 1.2 * sc, 1.2 * sc); g.fill(); } }
+  const slice = p.lemon ? '#f4e070' : p.fruit ? FRUITLOOK[p.fruit] : null;
+  if (slice && fill > 0) { ell(g, x + w * 0.12, lv + 6 * sc, 6 * sc, 6 * sc); path(g, slice, shade(slice, 0.75), 1); g.strokeStyle = 'rgba(255,255,255,0.6)'; g.lineWidth = 0.8; for (let k = 0; k < 6; k++) { g.beginPath(); g.moveTo(x + w * 0.12, lv + 6 * sc); g.lineTo(x + w * 0.12 + Math.cos(k) * 5 * sc, lv + 6 * sc + Math.sin(k) * 5 * sc); g.stroke(); } }
   if (p.ice && fill > 0) for (let k = 0; k < p.ice; k++) { rrect(g, x - w * 0.32 + (k % 3) * w * 0.22, lv + 2 * sc + Math.floor(k / 3) * 7 * sc + (k % 2) * 3 * sc, 6 * sc, 6 * sc, 1.5); path(g, 'rgba(255,255,255,0.6)', 'rgba(255,255,255,0.85)', 1); }
   g.restore();
   g.beginPath(); g.moveTo(x - w / 2, top); g.lineTo(x + w / 2, top); g.lineTo(x + w * 0.4, y); g.lineTo(x - w * 0.4, y); g.closePath(); path(g, null, INK, 1.8 * Math.max(0.7, sc));
   g.fillStyle = 'rgba(255,255,255,0.35)'; g.fillRect(x - w * 0.38, top + 3, w * 0.1, h - 8);
   if (p.sealed) { g.fillStyle = 'rgba(255,245,230,0.9)'; g.fillRect(x - w / 2, top - 1, w, 3 * sc); g.fillStyle = '#c83a2a'; g.fillRect(x - w * 0.2, top - 1, w * 0.4, 1.5 * sc); }
-  if (fill > 0.5 && !p.noStraw) { g.strokeStyle = INK; g.lineWidth = 4.5 * sc; g.beginPath(); g.moveTo(x + w * 0.1, top + h * 0.5); g.lineTo(x + w * 0.25, top - 12 * sc); g.stroke(); g.strokeStyle = p.pearls ? '#e05a6a' : '#5a9ac8'; g.lineWidth = 2.6 * sc; g.stroke(); }
+  if (fill > 0.5 && !p.noStraw && !p.foam) { const fat = tops.some((t) => ['pearl', 'boba', 'taroball', 'redbean', 'grass', 'pudding'].includes(t)); g.strokeStyle = INK; g.lineWidth = (fat ? 5.5 : 4) * sc; g.beginPath(); g.moveTo(x + w * 0.1, top + h * 0.5); g.lineTo(x + w * 0.25, top - 12 * sc); g.stroke(); g.strokeStyle = fat ? '#e05a6a' : '#5a9ac8'; g.lineWidth = (fat ? 3.4 : 2.4) * sc; g.stroke(); }
   g.restore();
 }
-export function dish(g, x, y, kind, sc = 1, eaten = 0) {
+// a dish: dry noodles, noodle soup, a rice bowl, a braised plate, a plate from the griddle, a steamer basket, a dessert bowl
+export function dish(g, x, y, kind, sc = 1, eaten = 0, p = {}) {
+  const dc = p.dc || '#c8a070', dt = p.dt || null, left = 1 - eaten;
   g.fillStyle = 'rgba(60,40,20,0.25)'; ell(g, x, y + 4 * sc, 26 * sc, 7 * sc); g.fill();
-  if (kind === 'noodle') { ell(g, x, y - 4 * sc, 24 * sc, 12 * sc); path(g, '#f4f0e8', INK, 1.8); ell(g, x, y - 6 * sc, 19 * sc, 8 * sc); path(g, '#ece4d0', null); if (eaten < 0.9) { const n = Math.ceil(5 * (1 - eaten)); ell(g, x, y - 6 * sc, 17 * sc * (1 - eaten * 0.6), 7 * sc * (1 - eaten * 0.6)); path(g, '#d8a868', null); g.strokeStyle = '#f0d090'; g.lineWidth = 2 * sc; for (let k = 0; k < n; k++) { g.beginPath(); g.arc(x - 8 * sc + k * 4 * sc, y - 7 * sc, 5 * sc, 3.4, 5.8); g.stroke(); } g.strokeStyle = '#6aa040'; g.lineWidth = 1.6 * sc; for (let k = 0; k < n; k++) { g.beginPath(); g.moveTo(x - 4 * sc + k * 2.5 * sc, y - 12 * sc); g.lineTo(x - 2 * sc + k * 2.5 * sc, y - 8 * sc); g.stroke(); } } return; }
+  const bowl = (rim) => { g.beginPath(); g.moveTo(x - 24 * sc, y - 6 * sc); g.quadraticCurveTo(x - 22 * sc, y + 4 * sc, x, y + 4 * sc); g.quadraticCurveTo(x + 22 * sc, y + 4 * sc, x + 24 * sc, y - 6 * sc); g.closePath(); path(g, rim || '#f4f0e8', INK, 1.6); g.strokeStyle = '#3a6a9a'; g.lineWidth = 1; g.beginPath(); g.moveTo(x - 21 * sc, y - 2 * sc); g.quadraticCurveTo(x, y + 2 * sc, x + 21 * sc, y - 2 * sc); g.stroke(); ell(g, x, y - 6 * sc, 24 * sc, 8 * sc); path(g, '#ece4d0', INK, 1.4); };
+  if (kind === 'noodle') {
+    ell(g, x, y - 4 * sc, 24 * sc, 12 * sc); path(g, '#f4f0e8', INK, 1.8); ell(g, x, y - 6 * sc, 19 * sc, 8 * sc); path(g, '#ece4d0', null);
+    if (eaten < 0.9) { const n = Math.ceil(5 * left); ell(g, x, y - 6 * sc, 17 * sc * (1 - eaten * 0.6), 7 * sc * (1 - eaten * 0.6)); path(g, p.dc ? dc : '#d8a868', null); g.strokeStyle = p.dc ? shade(dc, 1.3) : '#f0d090'; g.lineWidth = 2 * sc; for (let k = 0; k < n; k++) { g.beginPath(); g.arc(x - 8 * sc + k * 4 * sc, y - 7 * sc, 5 * sc, 3.4, 5.8); g.stroke(); } g.strokeStyle = '#6aa040'; g.lineWidth = 1.6 * sc; for (let k = 0; k < n; k++) { g.beginPath(); g.moveTo(x - 4 * sc + k * 2.5 * sc, y - 12 * sc); g.lineTo(x - 2 * sc + k * 2.5 * sc, y - 8 * sc); g.stroke(); } }
+    return;
+  }
+  if (kind === 'soup' || kind === 'rice' || kind === 'dessert') {
+    bowl(kind === 'dessert' ? '#e8f0f4' : null);
+    if (eaten < 0.95) {
+      const rx = 21 * sc * (0.5 + left * 0.5), ry = 6.5 * sc * (0.5 + left * 0.5);
+      if (kind === 'rice') { ell(g, x, y - 8 * sc, rx, ry + 2 * sc); path(g, '#faf8f0', null); ell(g, x + 3 * sc, y - 9 * sc, rx * 0.6, ry * 0.7); path(g, dc, null); g.fillStyle = '#f0d040'; g.fillRect(x - 14 * sc, y - 10 * sc, 5 * sc, 3 * sc); g.fillStyle = '#3a8a3a'; g.fillRect(x - 10 * sc, y - 6 * sc, 6 * sc, 2 * sc); }
+      else if (kind === 'soup') { ell(g, x, y - 6 * sc, rx, ry); path(g, dc, null); g.strokeStyle = '#f0dca0'; g.lineWidth = 1.6 * sc; for (let k = 0; k < 4; k++) { g.beginPath(); g.arc(x - 8 * sc + k * 5 * sc, y - 6 * sc, 4 * sc, 3.4, 5.8); g.stroke(); } if (dt) { g.fillStyle = dt; for (let k = 0; k < 3; k++) { ell(g, x - 8 * sc + k * 8 * sc, y - 8 * sc + (k % 2) * 2 * sc, 3.5 * sc, 2.5 * sc); g.fill(); } } g.fillStyle = '#5aa040'; for (let k = 0; k < 5; k++) g.fillRect(x - 10 * sc + k * 5 * sc, y - 10 * sc + (k % 2) * 3 * sc, 1.8 * sc, 1.8 * sc); if (eaten < 0.3) { g.fillStyle = 'rgba(255,255,255,0.4)'; ell(g, x - 6 * sc, y - 16 * sc, 4 * sc, 3 * sc); g.fill(); } }
+      else { ell(g, x, y - 7 * sc, rx, ry + 1 * sc); path(g, dc, null); if (dt) { g.fillStyle = dt; for (let k = 0; k < 6; k++) { ell(g, x - 10 * sc + (k % 3) * 9 * sc, y - 9 * sc + Math.floor(k / 3) * 4 * sc, 2.4 * sc, 2 * sc); g.fill(); } } }
+    }
+    return;
+  }
+  if (kind === 'steamer') {
+    ell(g, x, y - 2 * sc, 24 * sc, 9 * sc); path(g, '#c8a060', INK, 1.6); g.fillStyle = '#b08a50'; g.fillRect(x - 24 * sc, y - 4 * sc, 48 * sc, 4 * sc);
+    const n = Math.max(0, Math.ceil(4 * left)); for (let k = 0; k < n; k++) { const bx = x - 12 * sc + (k % 2) * 16 * sc + Math.floor(k / 2) * 4 * sc, by = y - 7 * sc - Math.floor(k / 2) * 3 * sc; ell(g, bx, by, 7 * sc, 5 * sc); path(g, dc, INK, 1); g.strokeStyle = 'rgba(160,130,90,0.6)'; g.lineWidth = 0.8; g.beginPath(); g.arc(bx, by - 2 * sc, 2 * sc, 0, 6); g.stroke(); }
+    return;
+  }
+  // a plate: braised pieces, dumplings, a rolled dan bing…
   ell(g, x, y - 2 * sc, 26 * sc, 10 * sc); path(g, '#f4f0e8', INK, 1.8); ell(g, x, y - 2 * sc, 21 * sc, 7 * sc); g.strokeStyle = '#3a6a9a'; g.lineWidth = 1; g.stroke();
-  const n = Math.ceil(4 * (1 - eaten));
-  for (let k = 0; k < n; k++) { rrect(g, x - 18 * sc + k * 9 * sc, y - 9 * sc + (k % 2) * 3 * sc, 9 * sc, 8 * sc, 2); path(g, '#9a6438', INK, 1.2); }
-  if (eaten < 0.6) { ell(g, x + 12 * sc, y - 6 * sc, 6 * sc, 5 * sc); path(g, '#8a5428', INK, 1.2); g.fillStyle = '#e8b030'; ell(g, x + 12 * sc, y - 6 * sc, 2.2 * sc, 2 * sc); g.fill(); }
-  g.fillStyle = '#6ab04a'; for (let k = 0; k < n + 1; k++) g.fillRect(x - 12 * sc + k * 5 * sc, y - 11 * sc, 2 * sc, 2 * sc);
+  const n = Math.ceil(4 * left);
+  if (kind === 'braise') { for (let k = 0; k < n; k++) { rrect(g, x - 18 * sc + k * 9 * sc, y - 9 * sc + (k % 2) * 3 * sc, 9 * sc, 8 * sc, 2); path(g, p.dc ? shade(dc, 0.8) : '#9a6438', INK, 1.2); } if (eaten < 0.6) { ell(g, x + 12 * sc, y - 6 * sc, 6 * sc, 5 * sc); path(g, '#8a5428', INK, 1.2); g.fillStyle = '#e8b030'; ell(g, x + 12 * sc, y - 6 * sc, 2.2 * sc, 2 * sc); g.fill(); } g.fillStyle = '#6ab04a'; for (let k = 0; k < n + 1; k++) g.fillRect(x - 12 * sc + k * 5 * sc, y - 11 * sc, 2 * sc, 2 * sc); return; }
+  for (let k = 0; k < n + 1; k++) { const px = x - 14 * sc + k * 7 * sc, py = y - 5 * sc + (k % 2) * 2 * sc; g.beginPath(); g.ellipse(px, py, 5 * sc, 3.6 * sc, -0.3, 0, 7); path(g, dc, INK, 1); if (dt) { g.fillStyle = dt; ell(g, px, py, 1.6 * sc, 1.2 * sc); g.fill(); } }
 }
 export function teapot(g, x, y, sc = 1) { ell(g, x, y - 10 * sc, 14 * sc, 11 * sc); path(g, '#8a4a2a', INK, 1.6); g.beginPath(); g.moveTo(x + 12 * sc, y - 12 * sc); g.quadraticCurveTo(x + 24 * sc, y - 16 * sc, x + 24 * sc, y - 22 * sc); path(g, null, INK, 3 * sc); ell(g, x, y - 21 * sc, 6 * sc, 2.5 * sc); path(g, '#6a3a1a', INK, 1.4); }
 

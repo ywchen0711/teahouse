@@ -1,24 +1,24 @@
 // Alley Teahouse: learn each item by making it by hand, sell it, grow and decorate the shop, visit friends online.
-import { PRODUCTS, ITEMS, SIZES, TABLES, DECOR, WALLS, FLOORS, UPGRADES, TX } from './data.js?v=2';
-import { room, counter, street as streetArt, lights, table, chair, seats, person, cup, dish, makeLook, particles, burst, finish, SLOTS, roomH, roomW, canvasH, spotsFor, spotShown, INK } from './art.js?v=2';
-import { make } from './make.js?v=2';
-import { Sim } from './sim.js?v=2';
-import { street, goOnline, update as netUpdate, like } from './net.js?v=1';
+import { PRODUCTS, ITEMS, SIZES, TABLES, DECOR, WALLS, FLOORS, UPGRADES, TX, CATS } from './data.js?v=3';
+import { room, counter, street as streetArt, lights, table, chair, seats, person, cup, dish, makeLook, particles, burst, finish, SLOTS, roomH, roomW, canvasH, spotsFor, spotShown, INK } from './art.js?v=3';
+import { make } from './make.js?v=3';
+import { Sim } from './sim.js?v=3';
+import { street, goOnline, update as netUpdate, like, send, online, waiting } from './net.js?v=3';
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const KEY = 'teahouse.v1', GAME = 'teahouse';
-const fresh = () => ({ lang: /^zh/i.test(navigator.language || '') ? 'zh' : 'en', name: '', shop: '', money: 300, rep: 0, day: 1, size: 0, tables: [{ slot: 0, type: 'wood2' }], decor: [], wall: 'cream', floor: 'plank', walls: ['cream'], floors: ['plank'], best: {}, up: { staff: 0, gear: 0, sign: 0, cat: 0 }, likes: 0, liked: {}, stats: { guests: 0, sold: 0, earned: 0 } });
+const fresh = () => ({ lang: /^zh/i.test(navigator.language || '') ? 'zh' : 'en', name: '', shop: '', money: 300, rep: 0, day: 1, size: 0, tables: [{ slot: 0, type: 'wood2' }], decor: [], wall: 'cream', floor: 'plank', walls: ['cream'], floors: ['plank'], best: {}, up: { staff: 0, gear: 0, sign: 0, cat: 0 }, likes: 0, liked: {}, stats: { guests: 0, sold: 0, earned: 0 }, seed: Math.floor(Math.random() * 1e6), friends: {}, notes: [], baskets: [], duelWins: 0 });
 const load = () => { try { const v = Object.assign(fresh(), JSON.parse(localStorage.getItem(KEY)) || {}); v.up = { ...fresh().up, ...v.up }; return v; } catch (e) { return fresh(); } };
 let S = load();
 let cloud = null;
 const t = () => TX[S.lang];
-const P = (id) => PRODUCTS.find((p) => p.id === id);
+const BYID = new Map(PRODUCTS.map((p) => [p.id, p])), P = (id) => BYID.get(id);
 const menu = () => PRODUCTS.filter((p) => (S.best[p.id] || 0) >= 60);
 const money = (v) => 'NT$' + Math.round(v).toLocaleString();
 function save() { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { /* full */ } if (cloud) cloud.touch(GAME, KEY); netUpdate(snapshot()); }
 const ambience = (st = S) => st.tables.reduce((s, x) => s + (TABLES.find((y) => y.id === x.type)?.amb || 0), 0) + (st.decor || []).reduce((s, d) => s + (DECOR.find((y) => y.id === d.id)?.amb || 0), 0) + (st.wall !== 'cream' ? 5 : 0) + (st.floor !== 'plank' ? 4 : 0) + (st.up && st.up.cat ? 6 : 0);
-const snapshot = () => ({ n: S.shop || t().defShop(S.name || '?'), owner: S.name, rep: Math.round(S.rep), money: Math.round(S.money), size: S.size, tables: S.tables, decor: S.decor, wall: S.wall, floor: S.floor, menu: menu().map((p) => p.id), day: S.day, amb: ambience(), cat: S.up.cat });
+const snapshot = () => ({ n: S.shop || t().defShop(S.name || '?'), owner: S.name, rep: Math.round(S.rep), money: Math.round(S.money), size: S.size, tables: S.tables, decor: S.decor, wall: S.wall, floor: S.floor, menu: menu().map((p) => p.id), day: S.day, amb: ambience(), cat: S.up.cat, seed: S.seed, learned: menu().length, perfect: Object.values(S.best).filter((v) => v >= 100).length, sold: S.stats.sold, baskets: (S.baskets || []).filter((b) => b.day >= S.day - 1) });
 
 // ------------------------------------------------------------------ the day: guests, staff, money
 const DAY = 150;
@@ -26,7 +26,7 @@ let day = null, fx = [], visit = null, speed = 1, lastT = 0;
 // a special order: some sugar and ice their own way (only what the drink has)
 function makeSpecial(p) {
   if (p.kind !== 'drink' || Math.random() > 0.16) return null;
-  const has = (it) => p.steps.some((s) => s.item === it), T = t(), sw = has('sugar') ? Math.floor(Math.random() * 4) : undefined, ic = has('ice') ? Math.floor(Math.random() * 3) : undefined;
+  const has = (it) => p.steps.some((s) => s.item === it), T = t(), sw = has('sugar') || has('honey') ? Math.floor(Math.random() * 4) : undefined, ic = has('ice') ? Math.floor(Math.random() * 3) : undefined;
   if (sw === undefined && ic === undefined) return null;
   const parts = [sw !== undefined ? T.sweet[sw] : '', ic !== undefined ? T.iceL[ic] : ''].filter(Boolean);
   return { sweet: sw, ice: ic, label: S.lang === 'zh' ? parts.join('') : parts.join(', ') };
@@ -38,7 +38,7 @@ const shop = new Sim({
   onEnter: () => { if (day) day.guests++; }, onServe: (g, score, byHand) => serve(g, score, byHand),
   onAngry: (g) => { S.rep = Math.max(0, S.rep - 2); pop(g.x, g.y - 90, '💢', '#a83a3a'); },
 });
-function newDay() { day = { t: 0, open: true, guests: 0, sold: 0, sales: 0, costs: 0, tips: 0, rep0: S.rep }; shop.reset(); hud(); }
+function newDay() { S.baskets = (S.baskets || []).filter((b) => b.day >= S.day - 1); day = { t: 0, open: true, guests: 0, sold: 0, sales: 0, costs: 0, tips: 0, rep0: S.rep }; shop.reset(); hud(); }
 function step(dt) {
   if (visit) { visit.sim.update(dt); return; }
   if (!day) return;
@@ -57,6 +57,7 @@ function serve(g, score, byHand) {
   S.stats.sold++; S.stats.earned += price + tip;
   const x = g.seat && !g.takeaway ? g.seat.x : g.x, y = g.seat && !g.takeaway ? g.seat.y : g.y;
   burst(fx, x, y - 60, byHand ? 14 : 7); pop(x, y - 92, `+${price + tip}`);
+  if (g.friend && !g.self) send('served', { to: g.friend, pid: g.pid, score });
   hud();
 }
 function pop(x, y, text, color) { fx.push({ kind: 'text', text, color, x, y, vx: 0, vy: -30, t: 0, life: 1.4, rot: 0, spin: 0 }); }
@@ -92,11 +93,22 @@ function startVisit(other) {
   const st = { ...other, up: { gear: 1, cat: other.cat } }, ids = other.menu && other.menu.length ? other.menu : ['melon'];
   const sim = new Sim({ st: () => st, menu: () => ids.map(P).filter(Boolean), T: () => t(), lang: () => S.lang, best: () => 85, fx, appeal: () => 0.55, foot: () => 0.5, staffN: () => 2, gear: () => 1, cat: () => !!other.cat, open: () => true, special: () => null, onEnter: () => {}, onServe: (g) => burst(fx, g.x, g.y - 60, 5), onAngry: () => {} });
   visit = { st, sim, name: other.n, id: other.id };
+  sim.addFriend({ id: 'me', name: S.name, seed: S.seed, self: true });
+  send('visit', { to: other.id, name: S.name, seed: S.seed });
+  clearInterval(startVisit.ping); startVisit.ping = setInterval(() => { if (visit && visit.id === other.id) send('ping', { to: other.id, name: S.name, seed: S.seed }); }, 20000);
   const key = other.id + ':' + new Date().toDateString(), T = t();
   closeDialog(); hud(); $('visitBar').hidden = false;
-  $('visitBar').innerHTML = `<b>🏮 ${T.visiting(esc(other.n))}</b> <small>${T.rep} ${other.rep} · ${T.amb} ${other.amb || 0}</small><span class="sp"></span><button class="btn hot" id="vLike" ${S.liked[key] ? 'disabled' : ''}>${S.liked[key] ? T.liked : T.like}</button><button class="btn" id="vBack">${T.back}</button>`;
+  $('visitBar').innerHTML = `<b>🏮 ${T.visiting(esc(other.n))}</b> <small>${T.rep} ${other.rep} · ${T.amb} ${other.amb || 0}</small><span class="sp"></span>
+    <button class="btn hot" id="vOrder">🧋 ${T.orderOne}</button><button class="btn" id="vLike" ${S.liked[key] ? 'disabled' : ''}>${S.liked[key] ? T.liked : T.like}</button><button class="btn" id="vGift">🎁</button><button class="btn" id="vNote">✍️</button><button class="btn" id="vDuel">⚔️</button><button class="btn" id="vBack">${T.back}</button>`;
   $('vLike').onclick = () => { like(other.id, S.shop || T.defShop(S.name)); S.liked[key] = 1; save(); $('vLike').disabled = true; $('vLike').textContent = T.liked; burst(fx, 480, 300, 20); };
-  $('vBack').onclick = () => { visit = null; $('visitBar').hidden = true; hud(); };
+  $('vGift').onclick = () => giftDialog(other.id); $('vNote').onclick = () => noteDialog(other.id); $('vDuel').onclick = () => challenge(other.id);
+  $('vOrder').onclick = () => {
+    const list = ids.map(P).filter(Boolean);
+    dialog(`<h3>🧋 ${T.orderAt(esc(other.n))}</h3><div class="cards">${list.slice(0, 60).map((p) => `<div class="pc"><canvas data-oc="${p.id}" width="60" height="60"></canvas><b>${esc(p[S.lang])}</b><small>${money(p.price)}</small><button class="btn hot" data-o="${p.id}">${T.orderOne}</button></div>`).join('')}</div>`);
+    document.querySelectorAll('[data-oc]').forEach((c) => { const p = P(c.dataset.oc), g = c.getContext('2d'); if (p.kind === 'food') dish(g, 30, 44, p.dish, 0.95, 0, p); else cup(g, 30, 54, p, 0.95); });
+    document.querySelectorAll('[data-o]').forEach((b) => b.onclick = () => { const p = P(b.dataset.o); if (!buy(p.price)) return; sim.friendOrder('me', p.id); send('order', { to: other.id, name: S.name, pid: p.id }); save(); hud(); closeDialog(); toast(T.youOrdered(p[S.lang])); });
+  };
+  $('vBack').onclick = () => { send('leave', { to: other.id }); clearInterval(startVisit.ping); visit = null; $('visitBar').hidden = true; hud(); };
 }
 
 // ------------------------------------------------------------------ the screens
@@ -134,7 +146,7 @@ function hud() {
   if (!$('hDay')) return; const T = t();
   $('hDay').textContent = '📅 ' + T.day(S.day) + (day && !day.open ? ' · ' + T.closed : '');
   $('hMoney').textContent = '💰 ' + money(S.money); $('hRep').textContent = '⭐ ' + Math.round(S.rep); $('hAmb').textContent = '🏮 ' + ambience();
-  $('menuBar').innerHTML = `<b>${T.menu}</b>` + PRODUCTS.map((p) => { const b = S.best[p.id] || 0; return b >= 60 ? `<span class="mi">${p.kind === 'food' ? '🍜' : '🧋'} ${p[S.lang]} <small>${money(p.price)} · ${b}</small></span>` : ''; }).join('') || '';
+  $('menuBar').innerHTML = `<b>${T.menu} <small>${menu().length}/${PRODUCTS.length}</small></b>` + menu().map((p) => `<span class="mi">${p.kind === 'food' ? '🍜' : '🧋'} ${p[S.lang]} <small>${money(p.price)} · ${S.best[p.id]}</small></span>`).join('');
 }
 function canvasClick(e) {
   const cv = $('cv'), r = cv.getBoundingClientRect(), x = (e.clientX - r.left) * 960 / r.width, y = (e.clientY - r.top) * cv.height / r.height;
@@ -151,11 +163,26 @@ function canvasClick(e) {
 }
 
 // ------------------------------------------------------------------ the kitchen: learn and improve recipes
+// the kitchen: 500 recipes in their categories; search, filter, a page at a time
+let kq = { cat: 'all', q: '', f: 'open', page: 0 };
 function kitchen(first) {
-  const T = t();
-  dialog(`<h3>🧑‍🍳 ${T.kitchen}</h3>${first ? `<p class="hint">${S.lang === 'zh' ? '開店前，先親手做出一杯及格的飲料！從冬瓜茶開始吧。' : 'Before you open, make your first drink by hand and pass! Start with winter melon tea.'}</p>` : ''}
-    <div class="cards">${PRODUCTS.map((p) => { const b = S.best[p.id] || 0, locked = S.rep < p.unlock; return `<div class="pc ${locked ? 'locked' : ''}"><canvas data-pc="${p.id}" width="70" height="70"></canvas><b>${p[S.lang]}</b><small>${money(p.price)}</small>${locked ? `<em>🔒 ${T.locked(p.unlock)}</em>` : `<em>${b >= 60 ? '✅ ' + T.learned + ' · ' + T.best(b) : b ? T.best(b) : ''}</em><button class="btn ${b >= 60 ? '' : 'hot'}" data-mk="${p.id}">${b >= 60 ? T.retry : T.test}</button>`}</div>`; }).join('')}</div>`);
-  document.querySelectorAll('[data-pc]').forEach((c) => { const p = P(c.dataset.pc), g = c.getContext('2d'); if (p.kind === 'food') dish(g, 35, 52, p.dish, 1.1); else cup(g, 35, 62, p, 1.1); });
+  const T = t(), L = S.lang, learned = menu().length, PER = 24;
+  const match = (p) => (kq.cat === 'all' || p.cat === kq.cat) && (!kq.q || p.zh.includes(kq.q) || p.en.toLowerCase().includes(kq.q.toLowerCase()))
+    && (kq.f === 'all' || (kq.f === 'open' && S.rep >= p.unlock && (S.best[p.id] || 0) < 60) || (kq.f === 'learned' && (S.best[p.id] || 0) >= 60) || (kq.f === 'locked' && S.rep < p.unlock));
+  let list = PRODUCTS.filter(match).sort((a, b) => a.unlock - b.unlock);
+  const pages = Math.max(1, Math.ceil(list.length / PER)); kq.page = Math.min(kq.page, pages - 1); const shown = list.slice(kq.page * PER, kq.page * PER + PER);
+  const catCount = (c) => { const all = PRODUCTS.filter((p) => c === 'all' || p.cat === c); return `${all.filter((p) => (S.best[p.id] || 0) >= 60).length}/${all.length}`; };
+  dialog(`<h3>🧑‍🍳 ${T.kitchen} <small class="dim">${T.learnedOf(learned, PRODUCTS.length)}</small></h3>${first ? `<p class="hint">${T.firstHint}</p>` : ''}
+    <div class="ktabs"><button class="chip ${kq.cat === 'all' ? 'on' : ''}" data-kc="all">${T.all} <small>${catCount('all')}</small></button>${CATS.map((c) => `<button class="chip ${kq.cat === c.id ? 'on' : ''}" data-kc="${c.id}">${c[L]} <small>${catCount(c.id)}</small></button>`).join('')}</div>
+    <div class="kbar"><input id="kQ" placeholder="🔍 ${T.search}" value="${esc(kq.q)}"><span class="sp"></span>${['open', 'learned', 'locked', 'all'].map((f) => `<button class="chip ${kq.f === f ? 'on' : ''}" data-kf="${f}">${T.kf[f]}</button>`).join('')}</div>
+    <div class="cards">${shown.map((p) => { const b = S.best[p.id] || 0, locked = S.rep < p.unlock; return `<div class="pc ${locked ? 'locked' : ''}"><canvas data-pc="${p.id}" width="70" height="70"></canvas><b>${esc(p[L])}</b><small>${money(p.price)} · ${CATS.find((c) => c.id === p.cat)[L]}</small>${locked ? `<em>🔒 ${T.locked(p.unlock)}</em>` : `<em>${b >= 60 ? (b === 100 ? '💯 ' : '✅ ') + T.best(b) : b ? T.best(b) : ''}</em><button class="btn ${b >= 60 ? '' : 'hot'}" data-mk="${p.id}">${b >= 60 ? T.retry : T.test}</button>`}</div>`; }).join('') || `<p class="dim">${T.none}</p>`}</div>
+    ${pages > 1 ? `<div class="row"><button class="btn" id="kPrev" ${kq.page ? '' : 'disabled'}>◀</button><span>${kq.page + 1} / ${pages}</span><button class="btn" id="kNext" ${kq.page < pages - 1 ? '' : 'disabled'}>▶</button></div>` : ''}`);
+  document.querySelectorAll('[data-pc]').forEach((c) => { const p = P(c.dataset.pc), g = c.getContext('2d'); if (p.kind === 'food') dish(g, 35, 52, p.dish, 1.1, 0, p); else cup(g, 35, 62, p, 1.1); });
+  document.querySelectorAll('[data-kc]').forEach((b) => b.onclick = () => { kq.cat = b.dataset.kc; kq.page = 0; kitchen(); });
+  document.querySelectorAll('[data-kf]').forEach((b) => b.onclick = () => { kq.f = b.dataset.kf; kq.page = 0; kitchen(); });
+  $('kQ').oninput = (e) => { kq.q = e.target.value.trim(); kq.page = 0; clearTimeout(kitchen.tm); kitchen.tm = setTimeout(() => { kitchen(); const i = $('kQ'); if (i) { i.focus(); i.setSelectionRange(i.value.length, i.value.length); } }, 250); };
+  if ($('kPrev')) $('kPrev').onclick = () => { kq.page--; kitchen(); };
+  if ($('kNext')) $('kNext').onclick = () => { kq.page++; kitchen(); };
   document.querySelectorAll('[data-mk]').forEach((b) => b.onclick = () => { const p = P(b.dataset.mk); makeDialog(p).then((r) => { if (!r) { kitchen(); return; } const was = S.best[p.id] || 0; S.best[p.id] = Math.max(was, r.score); save(); hud(); result(p, r, was); }); });
 }
 function makeDialog(p, special) {
@@ -197,7 +224,7 @@ function decorDialog() {
     <h4>${T.floors}</h4><div class="swatches">${FLOORS.map((f) => `<button class="sw ${S.floor === f.id ? 'on' : ''}" data-floor="${f.id}" style="background:${f.c}">${f[S.lang]}<small>${S.floors.includes(f.id) ? '' : money(f.cost)}</small></button>`).join('')}</div>
     <h4>${T.items}</h4><div class="cards">${DECOR.map((d) => `<div class="pc"><canvas data-dc="${d.id}" width="80" height="80"></canvas><b>${d[S.lang]}</b><small>${T.amb} +${d.amb}</small><button class="btn" data-dec="${d.id}">${money(d.cost)}</button></div>`).join('')}</div>
     ${S.decor.length ? `<div class="owned">${S.decor.map((d, i) => `<span>${DECOR.find((x) => x.id === d.id)[S.lang]} <button class="mini" data-rm="${i}">✕</button></span>`).join('')}</div>` : ''}`);
-  import('./art.js?v=2').then((A) => document.querySelectorAll('[data-dc]').forEach((c) => { const g = c.getContext('2d'), d = DECOR.find((x) => x.id === c.dataset.dc); A.decor(g, d.id, 40, d.spot === 'ceil' ? 0 : d.spot === 'wall' ? 40 : 76, 0); }));
+  import('./art.js?v=3').then((A) => document.querySelectorAll('[data-dc]').forEach((c) => { const g = c.getContext('2d'), d = DECOR.find((x) => x.id === c.dataset.dc); A.decor(g, d.id, 40, d.spot === 'ceil' ? 0 : d.spot === 'wall' ? 40 : 76, 0); }));
   document.querySelectorAll('[data-wall]').forEach((b) => b.onclick = () => { const w = WALLS.find((x) => x.id === b.dataset.wall); if (!S.walls.includes(w.id)) { if (!buy(w.cost)) return; S.walls.push(w.id); } S.wall = w.id; save(); hud(); decorDialog(); });
   document.querySelectorAll('[data-floor]').forEach((b) => b.onclick = () => { const f = FLOORS.find((x) => x.id === b.dataset.floor); if (!S.floors.includes(f.id)) { if (!buy(f.cost)) return; S.floors.push(f.id); } S.floor = f.id; save(); hud(); decorDialog(); });
   document.querySelectorAll('[data-dec]').forEach((b) => b.onclick = () => { const d = DECOR.find((x) => x.id === b.dataset.dec); if (S.money < d.cost) { toast(T.noMoney); return; } placing = d; closeDialog(); toast(S.lang === 'zh' ? '點一個綠色框框放上去' : 'Tap a green box to put it there'); });
@@ -210,16 +237,104 @@ function placeAt(i) {
   placing = null;
 }
 
-// ------------------------------------------------------------------ Tea Street
+// ------------------------------------------------------------------ Tea Street: shops online, chat, rankings, guestbook, friends
+let stTab = 'shops', rankBy = 'rep', unread = 0, duel = null;
+const GIFTS = [{ id: 'red100', cost: 100, amt: 100, icon: '🧧' }, { id: 'red500', cost: 500, amt: 500, icon: '🧧' }, { id: 'teabox', cost: 300, icon: '🍵' }, { id: 'basket', cost: 800, icon: '💐' }];
+const STICKERS = ['😀', '😂', '🧋', '🍜', '👍', '🎉', '❤️', '🙏', '😋', '🔥'];
+const me = () => ({ ...snapshot(), id: street.me, me: true });
+const isFriend = (id) => !!(S.friends && S.friends[id]);
+function badge() { const b = document.querySelector('[data-d="street"]'); if (b) b.dataset.badge = unread > 0 ? (unread > 9 ? '9+' : unread) : ''; }
 function streetDialog() {
-  const T = t(), others = street.shops.filter((s) => s.id !== street.me), all = [...street.shops.filter((s) => s.id !== street.me), { ...snapshot(), id: street.me, me: true }].sort((a, b) => b.rep - a.rep);
-  dialog(`<h3>🏘️ ${T.online}</h3><p class="dim">${street.status === 'on' ? '🟢' : '⏳ ' + T.connecting}</p>
-    ${others.length ? `<div class="shops">${others.map((s) => `<div class="line"><span>🏮 <b>${esc(s.n)}</b> <small>${esc(s.owner || '')} · ⭐ ${s.rep} · ${SIZES[s.size || 0][S.lang]} · 🏮 ${s.amb || 0}</small></span><button class="btn hot" data-vis="${s.id}">${T.visit}</button></div>`).join('')}</div>` : `<p>${T.nobody}</p>`}
-    <h4>🏆 ${T.rank}</h4><ol class="rank">${all.slice(0, 10).map((s) => `<li class="${s.me ? 'me' : ''}">${esc(s.n)}${s.me ? ` (${T.you})` : ''} <small>⭐ ${s.rep} · ${money(s.money)}</small></li>`).join('')}</ol>`);
-  document.querySelectorAll('[data-vis]').forEach((b) => b.onclick = () => startVisit(street.shops.find((s) => s.id === b.dataset.vis)));
+  const T = t(), others = street.shops.filter((s) => s.id !== street.me).sort((a, b) => (isFriend(b.id) - isFriend(a.id)) || b.rep - a.rep);
+  if (stTab === 'chat' || stTab === 'notes') { unread = 0; badge(); }
+  const tabs = ['shops', 'chat', 'rank', 'notes', 'friends'].map((k) => `<button class="chip ${stTab === k ? 'on' : ''}" data-st="${k}">${T.stTabs[k]}${k === 'shops' ? ` <small>${others.length}</small>` : k === 'notes' && (S.notes || []).some((n) => !n.read) ? ' •' : ''}</button>`).join('');
+  let body = '';
+  if (stTab === 'shops') body = others.length ? others.map((s) => `<div class="line"><span>${isFriend(s.id) ? '💛 ' : '🏮 '}<b>${esc(s.n)}</b> <small>${esc(s.owner || '')} · ⭐ ${s.rep} · 🍵 ${s.learned || (s.menu || []).length} · ${SIZES[s.size || 0][S.lang]}</small></span><span class="acts"><button class="btn hot" data-vis="${s.id}">${T.visit}</button><button class="btn" data-gift="${s.id}" title="${T.gift}">🎁</button><button class="btn" data-duel="${s.id}" title="${T.duel}">⚔️</button><button class="btn" data-fr="${s.id}" title="${T.friendAdd}">${isFriend(s.id) ? '💛' : '🤍'}</button></span></div>`).join('') : `<p>${T.nobody}</p>`;
+  if (stTab === 'chat') body = `<div class="chat" id="chatLog">${street.chat.slice(-60).map((m) => `<div class="${m.from === street.me ? 'mine' : ''}"><b>${esc(m.name || '?')}</b> ${esc(m.text)} <small>${new Date(m.t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</small></div>`).join('') || `<p class="dim">${T.chatEmpty}</p>`}</div>
+    <div class="stickers">${STICKERS.map((e) => `<button class="chip" data-stk="${e}">${e}</button>`).join('')}</div><div class="kbar"><input id="chatIn" maxlength="80" placeholder="${T.chatSay}"><button class="btn hot" id="chatGo">${T.send}</button></div>`;
+  if (stTab === 'rank') { const all = [...others, me()], key = { rep: (s) => s.rep, money: (s) => s.money, learned: (s) => s.learned || 0, perfect: (s) => s.perfect || 0, sold: (s) => s.sold || 0 }[rankBy]; body = `<div class="kbar">${['rep', 'money', 'learned', 'perfect', 'sold'].map((k) => `<button class="chip ${rankBy === k ? 'on' : ''}" data-rk="${k}">${T.rankBy[k]}</button>`).join('')}</div><ol class="rank">${all.sort((a, b) => key(b) - key(a)).slice(0, 20).map((s) => `<li class="${s.me ? 'me' : ''}">${esc(s.n)}${s.me ? ` (${T.you})` : ''} <small>${rankBy === 'money' ? money(key(s)) : key(s)}</small></li>`).join('')}</ol><p class="dim tiny">${T.rankNote}</p>`; }
+  if (stTab === 'notes') { (S.notes || []).forEach((n) => (n.read = true)); save(); body = (S.notes || []).length ? S.notes.map((n) => `<div class="note"><b>${esc(n.from)}</b> <small>${new Date(n.t).toLocaleString()}</small><p>${esc(n.text)}</p></div>`).join('') : `<p class="dim">${T.notesEmpty}</p>`; }
+  if (stTab === 'friends') { const ids = Object.keys(S.friends || {}); body = ids.length ? ids.map((id) => { const on = street.shops.find((s) => s.id === id); return `<div class="line"><span>${on ? '🟢' : '⚪'} <b>${esc(S.friends[id])}</b></span><span class="acts">${on ? `<button class="btn hot" data-vis="${id}">${T.visit}</button>` : ''}<button class="btn" data-note="${id}">✍️</button><button class="btn" data-gift="${id}">🎁</button><button class="btn" data-fr="${id}">💔</button></span></div>`; }).join('') + (waiting() ? `<p class="dim tiny">📮 ${T.outbox(waiting())}</p>` : '') : `<p class="dim">${T.friendsEmpty}</p>`; }
+  dialog(`<h3>🏘️ ${T.online} <small class="dim">${street.status === 'on' ? '🟢' : '⏳ ' + T.connecting}</small></h3><div class="ktabs">${tabs}</div><div class="stBody">${body}</div>`);
+  const L = $('chatLog'); if (L) L.scrollTop = 1e6;
+  document.querySelectorAll('[data-st]').forEach((b) => b.onclick = () => { stTab = b.dataset.st; streetDialog(); });
+  document.querySelectorAll('[data-rk]').forEach((b) => b.onclick = () => { rankBy = b.dataset.rk; streetDialog(); });
+  document.querySelectorAll('[data-vis]').forEach((b) => b.onclick = () => { const s = street.shops.find((x) => x.id === b.dataset.vis); if (s) startVisit(s); });
+  document.querySelectorAll('[data-gift]').forEach((b) => b.onclick = () => giftDialog(b.dataset.gift));
+  document.querySelectorAll('[data-duel]').forEach((b) => b.onclick = () => challenge(b.dataset.duel));
+  document.querySelectorAll('[data-note]').forEach((b) => b.onclick = () => noteDialog(b.dataset.note));
+  document.querySelectorAll('[data-fr]').forEach((b) => b.onclick = () => { const id = b.dataset.fr, s = street.shops.find((x) => x.id === id); S.friends = S.friends || {}; if (S.friends[id]) delete S.friends[id]; else S.friends[id] = (s && (s.owner || s.n)) || '?'; save(); streetDialog(); });
+  document.querySelectorAll('[data-stk]').forEach((b) => b.onclick = () => sayChat(b.dataset.stk));
+  if ($('chatGo')) { const go = () => { const v = $('chatIn').value.trim(); if (v) { sayChat(v); } }; $('chatGo').onclick = go; $('chatIn').onkeydown = (e) => { if (e.key === 'Enter') go(); }; $('chatIn').focus(); }
 }
-street.onShops = () => { if ($('dlg').open && $('dlgBody').querySelector('.rank')) streetDialog(); };
-street.onLike = (m) => { S.rep += 5; S.money += 50; S.likes++; save(); hud(); toast(t().youGotLike(m.from || '?')); burst(fx, 480, 260, 26); };
+let lastChat = 0;
+function sayChat(text) { if (Date.now() - lastChat < 1500) { toast(t().slowDown); return; } lastChat = Date.now(); send('chat', { name: S.name, shop: S.shop, text: text.slice(0, 80) }); stTab = 'chat'; streetDialog(); }
+const nameOf = (id) => { const s = street.shops.find((x) => x.id === id); return (s && (s.owner || s.n)) || (S.friends && S.friends[id]) || '?'; };
+function giftDialog(to) {
+  const T = t();
+  dialog(`<h3>🎁 ${T.giftTo(esc(nameOf(to)))}</h3>${GIFTS.map((g) => `<div class="line"><span>${g.icon} <b>${T.gifts[g.id]}</b> <small>${T.giftWhat[g.id]}</small></span><button class="btn hot" data-g="${g.id}">${money(g.cost)}</button></div>`).join('')}<p class="dim tiny">${online(to) ? '' : T.giftLater}</p>`);
+  document.querySelectorAll('[data-g]').forEach((b) => b.onclick = () => { const g = GIFTS.find((x) => x.id === b.dataset.g); if (!buy(g.cost)) return; const r = send('gift', { to, name: S.name, gift: g.id, amt: g.amt || 0 }, true); save(); hud(); closeDialog(); toast(r === 'queued' ? T.giftQueued : T.giftSent(T.gifts[g.id])); burst(fx, 480, 300, 14); });
+}
+function noteDialog(to) {
+  const T = t();
+  dialog(`<h3>✍️ ${T.noteTo(esc(nameOf(to)))}</h3><textarea id="noteIn" maxlength="140" rows="3" placeholder="${T.notePh}"></textarea><div class="row"><button class="big" id="noteGo">${T.send}</button></div>`);
+  $('noteIn').focus();
+  $('noteGo').onclick = () => { const v = $('noteIn').value.trim(); if (!v) return; const r = send('note', { to, name: S.name, text: v.slice(0, 140) }, true); closeDialog(); toast(r === 'queued' ? T.noteQueued : T.noteSent); };
+}
+// a recipe duel: both make the same thing, the better score wins
+function challenge(to) {
+  const T = t(), pool = menu().filter((p) => p.steps.length >= 5), p = pool.length ? pool[Math.floor(Math.random() * pool.length)] : P('melon');
+  duel = { id: Math.random().toString(36).slice(2, 8), other: to, pid: p.id, mine: null, theirs: null, started: false };
+  send('duel', { to, name: S.name, id: duel.id, pid: p.id });
+  dialog(`<h3>⚔️ ${T.duel}</h3><p>${T.duelAsk(esc(nameOf(to)), esc(p[S.lang]))}</p><p class="dim">${T.duelWait}</p>`);
+}
+function runDuel() {
+  const p = P(duel.pid), d = duel; d.started = true;
+  makeDialog(p).then((r) => { d.mine = r ? r.score : 0; send('duelDone', { to: d.other, id: d.id, score: d.mine, name: S.name }); if (r) { const was = S.best[p.id] || 0; S.best[p.id] = Math.max(was, r.score); save(); } duelResult(); });
+}
+function duelResult() {
+  const T = t(), d = duel; if (!d) return;
+  if (d.mine === null) return;
+  if (d.theirs === null) { dialog(`<h3>⚔️ ${T.duel}</h3><p>${T.duelYours(d.mine)}</p><p class="dim">${T.duelWaitOther(esc(nameOf(d.other)))}</p>`); return; }
+  const win = d.mine > d.theirs, tie = d.mine === d.theirs;
+  if (win) { S.rep += 10; S.money += 100; S.duelWins = (S.duelWins || 0) + 1; } else if (tie) { S.rep += 5; }
+  save(); hud(); burst(fx, 480, 260, win ? 30 : 8);
+  dialog(`<h3>⚔️ ${win ? T.duelWin : tie ? T.duelTie : T.duelLose}</h3><div class="sum"><span>${T.you}</span><b>${d.mine}</b><span>${esc(nameOf(d.other))}</span><b>${d.theirs}</b></div><p>${win ? T.duelPrize : ''}</p><div class="row"><button class="big" id="dOk">OK</button></div>`);
+  $('dOk').onclick = closeDialog; duel = null;
+}
+// messages from other players
+street.onShops = (list) => {
+  const now = new Set(list.map((s) => s.id));
+  for (const id of Object.keys(S.friends || {})) if (now.has(id) && !(street.seen || new Set()).has(id)) toast(t().friendOn(S.friends[id]));
+  street.seen = now;
+  if ($('dlg').open && $('dlgBody').querySelector('.stBody') && stTab !== 'chat') streetDialog();
+};
+street.on.like = (m) => { S.rep += 5; S.money += 50; S.likes++; save(); hud(); toast(t().youGotLike(m.name || '?')); burst(fx, 480, 260, 26); };
+street.on.chat = () => { if ($('dlg').open && $('chatLog')) streetDialog(); else { unread++; badge(); } };
+street.on.visit = (m) => { if (visit) return; shop.addFriend({ id: m.from, name: m.name || '?', seed: m.seed }); toast(t().friendIn(m.name || '?')); };
+street.on.ping = (m) => { if (!visit && !shop.friend(m.from)) shop.addFriend({ id: m.from, name: m.name || '?', seed: m.seed }); const g = shop.friend(m.from); if (g) g.pingT = Date.now(); };
+street.on.leave = (m) => { shop.friendLeave(m.from); };
+street.on.order = (m) => { if (shop.friendOrder(m.from, m.pid)) toast(t().friendOrdered(m.name || '?', P(m.pid)[S.lang])); };
+street.on.served = (m) => { if (visit && visit.id === m.from) { visit.sim.friendServed('me', m.score); toast(t().servedYou(visit.name, P(m.pid)[S.lang], m.score)); } };
+street.on.gift = (m) => {
+  const T = t();
+  if (m.gift === 'red100' || m.gift === 'red500') S.money += m.amt;
+  if (m.gift === 'teabox') S.rep += 5;
+  if (m.gift === 'basket') { S.rep += 3; S.baskets = [...(S.baskets || []), { from: m.name || '?', day: S.day }].slice(-8); }
+  save(); hud(); toast(T.gotGift(m.name || '?', T.gifts[m.gift])); burst(fx, 480, 300, 30);
+};
+street.on.note = (m) => { S.notes = [{ from: m.name || '?', text: String(m.text || '').slice(0, 140), t: m.t || Date.now() }, ...(S.notes || [])].slice(0, 40); save(); unread++; badge(); toast(t().gotNote(m.name || '?')); };
+street.on.duel = (m) => {
+  const T = t(), p = P(m.pid); if (!p) return;
+  dialog(`<h3>⚔️ ${T.duel}</h3><p>${T.duelFrom(esc(m.name || '?'), esc(p[S.lang]))}</p><div class="row"><button class="btn" id="dNo">${T.no}</button><button class="big" id="dYes">${T.yes}</button></div>`);
+  $('dNo').onclick = () => { send('duelNo', { to: m.from, id: m.id }); closeDialog(); };
+  $('dYes').onclick = () => { duel = { id: m.id, other: m.from, pid: m.pid, mine: null, theirs: null }; send('duelOk', { to: m.from, id: m.id }); runDuel(); };
+};
+street.on.duelOk = (m) => { if (duel && duel.id === m.id && !duel.started) runDuel(); };
+street.on.duelNo = (m) => { if (duel && duel.id === m.id) { duel = null; dialog(`<h3>⚔️</h3><p>${t().duelDeclined}</p>`); } };
+street.on.duelDone = (m) => { if (duel && duel.id === m.id) { duel.theirs = m.score; if (duel.mine !== null) duelResult(); } };
+// friends who stopped pinging have gone home
+setInterval(() => { for (const g of shop.guests) if (g.friend && !g.self && g.pingT && Date.now() - g.pingT > 70000) shop.friendLeave(g.friend); }, 10000);
 
 // ------------------------------------------------------------------ small things
 function dialog(html) { $('dlg').classList.remove('wide'); $('dlgBody').innerHTML = html; if (!$('dlg').open) $('dlg').showModal(); }
@@ -238,4 +353,4 @@ setInterval(() => { if (S.name) save(); }, 30000);
   start();
   try { cloud = await import('/save.js'); if (await cloud.pull(GAME, KEY)) { S = load(); start(); } } catch (e) { cloud = null; }
 })();
-window.TH = { get S() { return S; }, get guests() { return shop.guests; }, get day() { return day; }, shop, step, kitchen, newDay, makeDialog, startVisit, street };
+window.TH = { get S() { return S; }, get guests() { return shop.guests; }, get day() { return day; }, get visit() { return visit; }, shop, step, kitchen, newDay, makeDialog, startVisit, streetDialog, street, send };
