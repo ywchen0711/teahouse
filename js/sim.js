@@ -221,7 +221,7 @@ export class Sim {
     this.o.onServe(g, score, byHand);
     this.after(0.9, () => { if (!g.gone && !g.takeaway) { if (Math.random() < 0.2) { this.say(g, T.say.photo, 1.6); this.fx.push({ kind: 'flash', x: g.x, y: g.y - 30, vx: 0, vy: 0, t: 0, life: 0.4, rot: 0, spin: 0 }); } else this.say(g, T.say.yum(g.pid), 2); } });
     if (!g.takeaway && g.group.length > 1 && g.group.every((x) => x.served || x.gone || x.angry)) this.after(2.2, () => { const live = g.group.filter((x) => !x.gone && !x.angry); live.forEach((x) => { x.cheerT = 1.4; }); if (live[0]) this.say(live[0], T.say.cheers, 1.8); burst(this.fx, g.x, g.y - 70, 10); });
-    if (g.takeaway && !g.friend) { g.wave = 0.8; this.after(0.7, () => { if (!g.gone && g.state !== 'leave') this.leaveSeat(g, this.doorY(), T); }); }
+    if ((g.takeaway && !g.friend) || (g.vip && !g.seat)) { g.wave = 0.8; this.after(0.7, () => { if (!g.gone && g.state !== 'leave') this.leaveSeat(g, this.doorY(), T); }); }
     return true;
   }
   // ------------------------------------------------------------------ friends visiting over the network
@@ -234,6 +234,8 @@ export class Sim {
     const c = this.crew.find((x) => x.y <= LANE_Y + 4) || this.crew[0]; if (c) this.say(c, this.o.T().say.welcome(), 2);
     return g;
   }
+  // closing time has long passed: everyone still inside is shown the door
+  closeUp() { const T = this.o.T(); this.orders = []; for (const g of this.guests) if (!g.gone && g.state !== 'leave') { g.cashier = null; this.leaveSeat(g, this.doorY(), T); } this.queue = []; }
   friend(id) { return this.guests.find((g) => g.friend === id && !g.gone); }
   friendOrder(id, pid) {
     const g = this.friend(id); if (!g || !P(pid) || (g.pid && !g.served)) return false;
@@ -290,7 +292,8 @@ export class Sim {
   afterMake(c, ord, T) {
     const g = ord.g;
     if (g.gone || g.angry || g.served) { c.plan = [{ wait: 0.4, end: () => { c.carry = null; } }]; return; }
-    if (g.takeaway) { c.plan = [{ lane: PICKUP[g.spot || 0][0] }, { wait: 0.5, face: 0, end: () => { c.carry = null; this.say(c, T.say.here(), 1.6); this.deliver(g, this.o.best(g.pid), false, T); } }]; return; }
+    // to go, or a guest who found no free seat (a VIP or a friend on a full day): hand it over at the pickup counter
+    if (g.takeaway || !g.seat) { c.plan = [{ lane: PICKUP[g.spot || 0][0] }, { wait: 0.5, face: 0, end: () => { c.carry = null; this.say(c, T.say.here(), 1.6); this.deliver(g, this.o.best(g.pid), false, T); } }]; return; }
     c.plan = [{ lane: LANE_END }, { to: EXIT }, { go: this.standBy(g.seat) }, { wait: 0.6, face: g.seat.dir === 'l' ? 1 : g.seat.dir === 'r' ? -1 : 0, end: () => { c.carry = null; if (!g.gone && !g.angry) { this.say(c, T.say.here(), 1.6); this.deliver(g, this.o.best(g.pid), false, T); } } }, { go: EXIT }, { to: [LANE_END, LANE_Y] }];
   }
   // where the staff stand to serve or clear a seat

@@ -2,7 +2,7 @@
 import { PRODUCTS, ITEMS, SIZES, TABLES, DECOR, WALLS, FLOORS, UPGRADES, TX, CATS } from './data.js?v=3';
 import { room, counter, street as streetArt, lights, table, chair, seats, person, cup, dish, makeLook, particles, burst, finish, SLOTS, roomH, roomW, canvasH, spotsFor, spotShown, INK } from './art.js?v=3';
 import { make } from './make.js?v=3';
-import { Sim } from './sim.js?v=5';
+import { Sim } from './sim.js?v=6';
 import { EVENTS, shuffled } from './events.js?v=1';
 import { street, goOnline, update as netUpdate, like, send, online, waiting } from './net.js?v=3';
 
@@ -43,10 +43,14 @@ function newDay() { S.baskets = (S.baskets || []).filter((b) => b.day >= S.day -
 function step(dt) {
   if (visit) { visit.sim.update(dt); return; }
   if (!day) return;
-  if (day.open) { day.t += dt; if (day.t >= DAY) { day.open = false; day.closing = true; } }
+  if (day.open) { day.t += dt; if (day.t >= DAY) { day.open = false; day.closing = true; day.closeT = 0; } }
   shop.update(dt); stepEvents();
-  // after closing time the last guests finish, then the day is done
-  if (day.closing && !shop.guests.some((g) => !g.gone)) { day.closing = false; dropCard(); setTimeout(summary, 400); }
+  // after closing time the last guests finish, then the day is done. Friends visiting from Tea Street may stay and
+  // chat (they don't hold up the day), and if anyone is still inside long after closing they are seen out
+  if (day.closing) {
+    day.closeT += dt; if (day.closeT > 90 && !day.shooed) { day.shooed = true; shop.closeUp(); }
+    if (!shop.guests.some((g) => !g.gone && !(g.friend && !g.vip && g.state !== 'leave')) || day.closeT > 120) { day.closing = false; dropCard(); setTimeout(summary, 400); }
+  }
 }
 // a guest gets their order: they pay for it (more for a better one), tip by the shop's ambience, and are happy
 function serve(g, score, byHand) {
@@ -424,7 +428,8 @@ function toast(msg) { const n = document.querySelectorAll('.toast').length, d = 
 function loop(now) {
   requestAnimationFrame(loop);
   const dt = Math.min(0.05, (now - (lastT || now)) / 1000); lastT = now;
-  if ($('cv')) { for (let k = 0; k < speed; k++) step(dt); draw(now); if (day && $('hProg')) $('hProg').style.width = Math.min(100, day.t / DAY * 100) + '%'; if (Math.random() < 0.02) hud(); }
+  // one bad moment in the shop shouldn't freeze the whole game: report it and keep going
+  if ($('cv')) { try { for (let k = 0; k < speed; k++) step(dt); } catch (e) { console.error(e); } draw(now); if (day && $('hProg')) $('hProg').style.width = Math.min(100, day.t / DAY * 100) + '%'; if (Math.random() < 0.02) hud(); }
 }
 requestAnimationFrame(loop);
 setInterval(() => { if (S.name) save(); }, 30000);
