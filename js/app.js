@@ -1,85 +1,62 @@
 // Alley Teahouse: learn each item by making it by hand, sell it, grow and decorate the shop, visit friends online.
-import { PRODUCTS, ITEMS, SIZES, TABLES, DECOR, WALLS, FLOORS, UPGRADES, TX } from './data.js?v=1';
-import { room, counter, floorDecor, table, seats, person, staff, cup, dish, teapot, makeLook, particles, burst, finish, SLOTS, roomH, roomW, spotsFor, hash, INK } from './art.js?v=1';
-import { make } from './make.js?v=1';
+import { PRODUCTS, ITEMS, SIZES, TABLES, DECOR, WALLS, FLOORS, UPGRADES, TX } from './data.js?v=2';
+import { room, counter, street as streetArt, lights, table, chair, seats, person, cup, dish, makeLook, particles, burst, finish, SLOTS, roomH, roomW, canvasH, spotsFor, spotShown, INK } from './art.js?v=2';
+import { make } from './make.js?v=2';
+import { Sim } from './sim.js?v=2';
 import { street, goOnline, update as netUpdate, like } from './net.js?v=1';
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const KEY = 'teahouse.v1', GAME = 'teahouse';
-const fresh = () => ({ lang: /^zh/i.test(navigator.language || '') ? 'zh' : 'en', name: '', shop: '', money: 300, rep: 0, day: 1, size: 0, tables: [{ slot: 0, type: 'wood2' }], decor: [], wall: 'cream', floor: 'plank', walls: ['cream'], floors: ['plank'], best: {}, up: { staff: 0, gear: 0, sign: 0 }, likes: 0, liked: {}, stats: { guests: 0, sold: 0, earned: 0 } });
-let S = (() => { try { return Object.assign(fresh(), JSON.parse(localStorage.getItem(KEY)) || {}); } catch (e) { return fresh(); } })();
+const fresh = () => ({ lang: /^zh/i.test(navigator.language || '') ? 'zh' : 'en', name: '', shop: '', money: 300, rep: 0, day: 1, size: 0, tables: [{ slot: 0, type: 'wood2' }], decor: [], wall: 'cream', floor: 'plank', walls: ['cream'], floors: ['plank'], best: {}, up: { staff: 0, gear: 0, sign: 0, cat: 0 }, likes: 0, liked: {}, stats: { guests: 0, sold: 0, earned: 0 } });
+const load = () => { try { const v = Object.assign(fresh(), JSON.parse(localStorage.getItem(KEY)) || {}); v.up = { ...fresh().up, ...v.up }; return v; } catch (e) { return fresh(); } };
+let S = load();
 let cloud = null;
 const t = () => TX[S.lang];
 const P = (id) => PRODUCTS.find((p) => p.id === id);
 const menu = () => PRODUCTS.filter((p) => (S.best[p.id] || 0) >= 60);
 const money = (v) => 'NT$' + Math.round(v).toLocaleString();
 function save() { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { /* full */ } if (cloud) cloud.touch(GAME, KEY); netUpdate(snapshot()); }
-const ambience = (st = S) => st.tables.reduce((s, x) => s + (TABLES.find((y) => y.id === x.type)?.amb || 0), 0) + (st.decor || []).reduce((s, d) => s + (DECOR.find((y) => y.id === d.id)?.amb || 0), 0) + (st.wall !== 'cream' ? 5 : 0) + (st.floor !== 'plank' ? 4 : 0);
-const snapshot = () => ({ n: S.shop || t().defShop(S.name || '?'), owner: S.name, rep: Math.round(S.rep), money: Math.round(S.money), size: S.size, tables: S.tables, decor: S.decor, wall: S.wall, floor: S.floor, menu: menu().map((p) => p.id), day: S.day, amb: ambience() });
+const ambience = (st = S) => st.tables.reduce((s, x) => s + (TABLES.find((y) => y.id === x.type)?.amb || 0), 0) + (st.decor || []).reduce((s, d) => s + (DECOR.find((y) => y.id === d.id)?.amb || 0), 0) + (st.wall !== 'cream' ? 5 : 0) + (st.floor !== 'plank' ? 4 : 0) + (st.up && st.up.cat ? 6 : 0);
+const snapshot = () => ({ n: S.shop || t().defShop(S.name || '?'), owner: S.name, rep: Math.round(S.rep), money: Math.round(S.money), size: S.size, tables: S.tables, decor: S.decor, wall: S.wall, floor: S.floor, menu: menu().map((p) => p.id), day: S.day, amb: ambience(), cat: S.up.cat });
 
 // ------------------------------------------------------------------ the day: guests, staff, money
 const DAY = 150;
-let day = null, guests = [], crew = [], fx = [], visit = null, speed = 1, lastT = 0, view = { k: 1, ox: 0, oy: 0 };
-function newDay() {
-  day = { t: 0, open: true, guests: 0, sold: 0, sales: 0, costs: 0, tips: 0, rep0: S.rep };
-  guests = []; crew = Array.from({ length: 1 + S.up.staff }, (_, k) => ({ k, state: 'idle', x: 70 + k * 46, y: 198, job: null, t: 0 }));
-  hud();
+let day = null, fx = [], visit = null, speed = 1, lastT = 0;
+// a special order: some sugar and ice their own way (only what the drink has)
+function makeSpecial(p) {
+  if (p.kind !== 'drink' || Math.random() > 0.16) return null;
+  const has = (it) => p.steps.some((s) => s.item === it), T = t(), sw = has('sugar') ? Math.floor(Math.random() * 4) : undefined, ic = has('ice') ? Math.floor(Math.random() * 3) : undefined;
+  if (sw === undefined && ic === undefined) return null;
+  const parts = [sw !== undefined ? T.sweet[sw] : '', ic !== undefined ? T.iceL[ic] : ''].filter(Boolean);
+  return { sweet: sw, ice: ic, label: S.lang === 'zh' ? parts.join('') : parts.join(', ') };
 }
-function seatList(st = S) { const out = []; st.tables.forEach((tb, ti) => { const [x, y] = SLOTS[tb.slot]; seats(tb.type, x, y).forEach(([sx, sy], si) => out.push({ ti, si, x: sx, y: sy, tx: x, ty: y })); }); return out; }
-const DOOR = [75, 200];
-function spawn() {
-  const free = seatList().filter((s) => !guests.some((g) => g.seat && g.seat.ti === s.ti && g.seat.si === s.si));
-  if (!free.length || !menu().length) return;
-  const seat = free[Math.floor(Math.random() * free.length)], m = menu(), p = m[Math.floor(Math.random() * m.length)];
-  // now and then a guest wants it their own way
-  const special = p.kind === 'drink' && Math.random() < 0.16 ? (() => { const sw = Math.floor(Math.random() * 4), ic = Math.floor(Math.random() * 3); return { sweet: sw, ice: ic, label: S.lang === 'zh' ? t().sweet[sw] + t().iceL[ic] : `${t().sweet[sw]}, ${t().iceL[ic]}` }; })() : null;
-  guests.push({ id: Math.random(), look: makeLook(Math.floor(Math.random() * 1e6)), seat, p: p.id, special, state: 'walk', x: DOOR[0], y: DOOR[1], wait: 0, eat: 0, served: false, mood: 'wait' });
-  day.guests++;
-}
+const shop = new Sim({
+  st: () => S, menu: () => menu(), T: () => t(), lang: () => S.lang, best: (pid) => Math.max(60, S.best[pid] || 60), fx,
+  appeal: () => Math.min(0.85, 0.3 + S.rep * 0.0007 + ambience() * 0.006 + S.up.sign * 0.06), foot: () => 0.45 + S.up.sign * 0.08 + Math.min(0.3, S.rep * 0.0003),
+  staffN: () => 1 + S.up.staff, gear: () => S.up.gear, cat: () => !!S.up.cat, open: () => !!(day && day.open), special: makeSpecial,
+  onEnter: () => { if (day) day.guests++; }, onServe: (g, score, byHand) => serve(g, score, byHand),
+  onAngry: (g) => { S.rep = Math.max(0, S.rep - 2); pop(g.x, g.y - 90, '💢', '#a83a3a'); },
+});
+function newDay() { day = { t: 0, open: true, guests: 0, sold: 0, sales: 0, costs: 0, tips: 0, rep0: S.rep }; shop.reset(); hud(); }
 function step(dt) {
-  if (visit) { stepVisit(dt); return; }
+  if (visit) { visit.sim.update(dt); return; }
   if (!day) return;
-  if (day.open) {
-    day.t += dt;
-    const rate = 0.05 + Math.min(0.25, S.rep * 0.0004) + ambience() * 0.002 + S.up.sign * 0.025;
-    if (Math.random() < rate * dt * 4) spawn();
-    if (day.t >= DAY) { day.open = false; setTimeout(summary, 400); }
-  }
-  for (const g of guests) {
-    if (g.state === 'walk' || g.state === 'leave') {
-      const tx = g.state === 'walk' ? g.seat.x : DOOR[0], ty = g.state === 'walk' ? g.seat.y : DOOR[1] - 30;
-      const dx = tx - g.x, dy = ty - g.y, d = Math.hypot(dx, dy), sp = 120 * dt;
-      if (d < sp) { g.x = tx; g.y = ty; if (g.state === 'walk') { g.state = 'order'; } else g.gone = true; }
-      else { g.x += (dx / d) * sp; g.y += (dy / d) * sp; }
-    } else if (g.state === 'order') { g.wait += dt; if (g.wait > (g.special ? 40 : 28)) { g.state = 'leave'; g.mood = 'sad'; S.rep = Math.max(0, S.rep - 2); pop(g.x, g.y - 70, '💢', '#a83a3a'); } }
-    else if (g.state === 'drink') { g.eat += dt; if (g.eat > 9) { g.state = 'leave'; g.mood = 'happy'; } }
-  }
-  guests = guests.filter((g) => !g.gone);
-  // staff: take the oldest order (special orders wait a little for you, then the staff make them as usual)
-  for (const c of crew) {
-    if (c.state === 'idle') {
-      const g = guests.filter((x) => x.state === 'order' && !x.taken && (!x.special || x.wait > 14)).sort((a, b) => b.wait - a.wait)[0];
-      if (g) { g.taken = true; c.job = g; c.state = 'make'; c.t = 5.5 / (1 + S.up.gear * 0.3); }
-    } else if (c.state === 'make') { c.t -= dt; if (c.t <= 0) { c.state = 'carry'; } }
-    else if (c.state === 'carry' || c.state === 'back') {
-      const g = c.job, tx = c.state === 'carry' ? (g ? g.seat.x + (g.seat.x < g.seat.tx ? 30 : -30) : 90) : 70 + c.k * 46, ty = c.state === 'carry' ? (g ? g.seat.y + 30 : 198) : 198;
-      const dx = tx - c.x, dy = ty - c.y, d = Math.hypot(dx, dy), sp = 160 * dt;
-      if (d < sp) { c.x = tx; c.y = ty; if (c.state === 'carry') { if (g && g.state === 'order') serve(g, S.best[g.p] || 60, false); c.state = 'back'; } else { c.state = 'idle'; c.job = null; } }
-      else { c.x += (dx / d) * sp; c.y += (dy / d) * sp; }
-    }
-  }
+  if (day.open) { day.t += dt; if (day.t >= DAY) { day.open = false; day.closing = true; } }
+  shop.update(dt);
+  // after closing time the last guests finish, then the day is done
+  if (day.closing && !shop.guests.some((g) => !g.gone)) { day.closing = false; setTimeout(summary, 400); }
 }
 // a guest gets their order: they pay for it (more for a better one), tip by the shop's ambience, and are happy
 function serve(g, score, byHand) {
-  const p = P(g.p), q = 0.6 + score / 100 * 0.6, price = Math.round(p.price * q);
+  const p = P(g.pid), q = 0.6 + score / 100 * 0.6, price = Math.round(p.price * q);
   let tip = Math.round(p.price * Math.max(0, (score - 55) / 200 + ambience() / 400) * (0.6 + Math.random() * 0.8));
   if (byHand) tip += Math.round(score * 0.8);
-  g.state = 'drink'; g.served = true; g.mood = 'happy'; g.score = score;
   S.money += price + tip - p.cost; S.rep += score / 80 * (byHand ? 2 : 1);
   Object.assign(day, { sold: day.sold + 1, sales: day.sales + price, costs: day.costs + p.cost, tips: day.tips + tip });
   S.stats.sold++; S.stats.earned += price + tip;
-  burst(fx, g.x, g.y - 60, byHand ? 14 : 7); pop(g.x, g.y - 80, `+${price + tip}`);
+  const x = g.seat && !g.takeaway ? g.seat.x : g.x, y = g.seat && !g.takeaway ? g.seat.y : g.y;
+  burst(fx, x, y - 60, byHand ? 14 : 7); pop(x, y - 92, `+${price + tip}`);
   hud();
 }
 function pop(x, y, text, color) { fx.push({ kind: 'text', text, color, x, y, vx: 0, vy: -30, t: 0, life: 1.4, rot: 0, spin: 0 }); }
@@ -95,53 +72,31 @@ function summary() {
 // ------------------------------------------------------------------ drawing the shop (mine, or the one I'm visiting)
 function draw(now) {
   const cv = $('cv'); if (!cv) return;
-  const st = visit ? visit.st : S, H = roomH(st.size), g = cv.getContext('2d'), time = now / 1000;
+  const st = visit ? visit.st : S, sim = visit ? visit.sim : shop, H = canvasH(st.size), g = cv.getContext('2d'), time = now / 1000;
   if (cv.height !== H) cv.height = H;
+  const view = { ...st, lang: S.lang, menu: visit ? st.menu : menu().map((p) => p.id) };
   g.clearRect(0, 0, 960, H);
-  room(g, { ...st, lang: S.lang }, time);
-  const people = visit ? visit.guests : guests, workers = visit ? visit.crew : crew;
-  // staff behind the counter, then the counter
-  for (const c of workers) if (c.state === 'idle' || c.state === 'make') staff(g, c.x, c.y, c.k, { t: time, sit: true, mood: c.state === 'make' ? 'wait' : 'happy' });
-  counter(g, 20, 186, time, st);
-  for (const c of workers) if (c.state === 'make') { g.fillStyle = 'rgba(255,255,255,0.8)'; g.beginPath(); g.arc(c.x, c.y - 92, 12, 0, 7); g.fill(); g.strokeStyle = '#c8503e'; g.lineWidth = 3; g.beginPath(); g.arc(c.x, c.y - 92, 9, -1.57, -1.57 + 6.28 * (1 - c.t / (5.5 / (1 + (st.up ? st.up.gear : 0) * 0.3)))); g.stroke(); }
-  // everything else, back to front
-  const items = [];
-  st.tables.forEach((tb, ti) => { const [x, y] = SLOTS[tb.slot]; items.push({ y, f: () => { table(g, x, y, tb.type); for (const gu of people) if (gu.seat && gu.seat.ti === ti && (gu.state === 'drink' || gu.served)) { const cx = gu.seat.x + (x - gu.seat.x) * 0.45, cy = y - (tb.type === 'round4' ? 6 : tb.type === 'tatami' ? -2 : -12); const p = P(gu.p); if (p.kind === 'food') dish(g, cx, cy, p.dish, 0.9); else cup(g, cx, cy, p, 0.9, Math.max(0.25, 1 - gu.eat / 10)); } if (tb.type !== 'wood2') teapot(g, x + 18, y - 4, 0.8); } }); });
-  for (const gu of people) items.push({ y: gu.y + (gu.state === 'walk' || gu.state === 'leave' ? 30 : -1), f: () => { person(g, gu.x, gu.y, gu.look, { sit: gu.state === 'order' || gu.state === 'drink', walk: gu.state === 'walk' || gu.state === 'leave', t: time + gu.id * 9, mood: gu.state === 'drink' ? 'happy' : gu.mood, cheer: gu.state === 'drink' && gu.eat < 1.2 }); if (gu.state === 'order') bubble(g, gu, time); } });
-  for (const c of workers) if (c.state === 'carry' || c.state === 'back') items.push({ y: c.y + 30, f: () => { staff(g, c.x, c.y, c.k, { walk: true, t: time }); if (c.state === 'carry' && c.job) { const p = P(c.job.p); if (p.kind === 'food') dish(g, c.x + 18, c.y - 4, p.dish, 0.7); else cup(g, c.x + 18, c.y - 2, p, 0.7); } } });
-  items.sort((a, b) => a.y - b.y).forEach((it) => it.f());
-  floorDecor(g, st, time);
-  if (placing) for (const [i, [x, y]] of spotsFor(placing.spot).entries()) { if (x > roomW(st.size) - 20 || y > roomH(st.size)) continue; const busy = S.decor.some((d) => d.spot === placing.spot && d.at === i); g.strokeStyle = busy ? '#a83a3a' : '#3a8a4a'; g.lineWidth = 3; g.setLineDash([6, 4]); g.strokeRect(x - 34, y - (placing.spot === 'ceil' ? -4 : 70), 68, 72); g.setLineDash([]); }
+  room(g, view, time); streetArt(g, view, time);
+  sim.drawBehind(g, time);
+  counter(g, 20, 186, time, view);
+  sim.drawFront(g, time, view);
+  lights(g, view, time);
+  sim.drawOver(g, time);
+  if (placing) for (const [i, [x, y]] of spotsFor(placing.spot).entries()) { if (!spotShown(st, placing.spot, i)) continue; const busy = S.decor.some((d) => d.spot === placing.spot && d.at === i); g.strokeStyle = busy ? '#a83a3a' : '#3a8a4a'; g.lineWidth = 3; g.setLineDash([6, 4]); g.strokeRect(x - 34, y - (placing.spot === 'ceil' ? -4 : 70), 68, 72); g.setLineDash([]); }
   particles(g, fx, Math.min(0.05, (now - (draw.last || now)) / 1000)); draw.last = now;
   finish(g, 960, H);
 }
-function bubble(g, gu, time) {
-  const x = gu.x + 22, y = gu.y - 82 + Math.sin(time * 3 + gu.id) * 2, p = P(gu.p), w = gu.special ? 92 : 44;
-  g.fillStyle = gu.special ? '#fff4c8' : '#fffaf0'; g.strokeStyle = INK; g.lineWidth = 2; g.beginPath(); g.roundRect(x - 6, y - 36, w, 40, 10); g.fill(); g.stroke(); g.beginPath(); g.moveTo(x, y + 4); g.lineTo(x - 8, y + 12); g.lineTo(x + 8, y + 4); g.fill();
-  if (p.kind === 'food') dish(g, x + 16, y - 6, p.dish, 0.55); else cup(g, x + 16, y - 2, p, 0.6);
-  if (gu.special) { g.fillStyle = '#a8601a'; g.font = '800 12px Nunito, "Noto Sans TC", sans-serif'; g.textAlign = 'left'; g.fillText('⭐', x + 32, y - 20); g.fillText(gu.special.label.slice(0, 6), x + 32, y - 4); }
-  // patience
-  const k = 1 - gu.wait / (gu.special ? 40 : 28); g.fillStyle = k > 0.5 ? '#7ab04a' : k > 0.25 ? '#e8b040' : '#d84a3a'; g.fillRect(x - 2, y + 6, (w - 8) * Math.max(0, k), 4);
-}
 
 // ------------------------------------------------------------------ visiting someone else's teahouse (guests are only for show)
-function startVisit(shop) {
-  visit = { st: { ...shop, up: { gear: 1 } }, guests: [], crew: [{ k: 0, state: 'idle', x: 70, y: 198 }], name: shop.n, id: shop.id, t: 0 };
+function startVisit(other) {
+  const st = { ...other, up: { gear: 1, cat: other.cat } }, ids = other.menu && other.menu.length ? other.menu : ['melon'];
+  const sim = new Sim({ st: () => st, menu: () => ids.map(P).filter(Boolean), T: () => t(), lang: () => S.lang, best: () => 85, fx, appeal: () => 0.55, foot: () => 0.5, staffN: () => 2, gear: () => 1, cat: () => !!other.cat, open: () => true, special: () => null, onEnter: () => {}, onServe: (g) => burst(fx, g.x, g.y - 60, 5), onAngry: () => {} });
+  visit = { st, sim, name: other.n, id: other.id };
+  const key = other.id + ':' + new Date().toDateString(), T = t();
   closeDialog(); hud(); $('visitBar').hidden = false;
-  $('visitBar').innerHTML = `<b>🏮 ${t().visiting(esc(shop.n))}</b> <small>${t().rep} ${shop.rep} · ${t().amb} ${shop.amb || 0}</small><span class="sp"></span><button class="btn hot" id="vLike" ${S.liked[shop.id + ':' + new Date().toDateString()] ? 'disabled' : ''}>${S.liked[shop.id + ':' + new Date().toDateString()] ? t().liked : t().like}</button><button class="btn" id="vBack">${t().back}</button>`;
-  $('vLike').onclick = () => { like(shop.id, S.shop || t().defShop(S.name)); S.liked[shop.id + ':' + new Date().toDateString()] = 1; save(); $('vLike').disabled = true; $('vLike').textContent = t().liked; burst(fx, 480, 300, 20); };
+  $('visitBar').innerHTML = `<b>🏮 ${T.visiting(esc(other.n))}</b> <small>${T.rep} ${other.rep} · ${T.amb} ${other.amb || 0}</small><span class="sp"></span><button class="btn hot" id="vLike" ${S.liked[key] ? 'disabled' : ''}>${S.liked[key] ? T.liked : T.like}</button><button class="btn" id="vBack">${T.back}</button>`;
+  $('vLike').onclick = () => { like(other.id, S.shop || T.defShop(S.name)); S.liked[key] = 1; save(); $('vLike').disabled = true; $('vLike').textContent = T.liked; burst(fx, 480, 300, 20); };
   $('vBack').onclick = () => { visit = null; $('visitBar').hidden = true; hud(); };
-}
-function stepVisit(dt) {
-  const v = visit, menuIds = v.st.menu && v.st.menu.length ? v.st.menu : ['melon'];
-  v.t += dt;
-  if (Math.random() < dt * 0.5) { const free = seatList(v.st).filter((s) => !v.guests.some((g) => g.seat.ti === s.ti && g.seat.si === s.si)); if (free.length) v.guests.push({ id: Math.random(), look: makeLook(Math.floor(Math.random() * 1e6)), seat: free[Math.floor(Math.random() * free.length)], p: menuIds[Math.floor(Math.random() * menuIds.length)], state: 'walk', x: DOOR[0], y: DOOR[1], wait: 0, eat: 0, mood: 'wait' }); }
-  for (const g of v.guests) {
-    if (g.state === 'walk' || g.state === 'leave') { const tx = g.state === 'walk' ? g.seat.x : DOOR[0], ty = g.state === 'walk' ? g.seat.y : DOOR[1] - 30, dx = tx - g.x, dy = ty - g.y, d = Math.hypot(dx, dy), sp = 120 * dt; if (d < sp) { g.x = tx; g.y = ty; if (g.state === 'walk') g.state = 'order'; else g.gone = true; } else { g.x += dx / d * sp; g.y += dy / d * sp; } }
-    else if (g.state === 'order') { g.wait += dt; if (g.wait > 3) { g.state = 'drink'; g.served = true; g.mood = 'happy'; burst(fx, g.x, g.y - 60, 5); } }
-    else if (g.state === 'drink') { g.eat += dt; if (g.eat > 8) g.state = 'leave'; }
-  }
-  v.guests = v.guests.filter((g) => !g.gone);
 }
 
 // ------------------------------------------------------------------ the screens
@@ -171,8 +126,8 @@ function titleScreen() {
   $('tGo').onclick = () => { const n = $('tName').value.trim(); if (!n) { $('tName').focus(); return; } S.name = n; S.shop = $('tShop').value.trim() || T.defShop(n); save(); start(); };
   $('tLang').onclick = () => { S.lang = S.lang === 'zh' ? 'en' : 'zh'; save(); titleScreen(); };
   // a busy little scene on the title screen
-  const g = $('tcv').getContext('2d'), demo = { size: 3, wall: 'brick', floor: 'plank', tables: [{ slot: 0, type: 'round4' }, { slot: 1, type: 'wood2' }, { slot: 2, type: 'tatami' }], decor: [{ id: 'lantern', spot: 'ceil', at: 0 }, { id: 'lantern', spot: 'ceil', at: 2 }, { id: 'scroll', spot: 'wall', at: 1 }, { id: 'plant', spot: 'floor', at: 1 }, { id: 'umbrella', spot: 'wall', at: 3 }], lang: S.lang };
-  const tick = (now) => { if (!$('tcv')) return; const tm = now / 1000; g.save(); g.scale(1, 1); g.clearRect(0, 0, 960, 420); g.translate(0, 8); room(g, demo, tm); counter(g, 20, 186, tm, demo); [[0, 'round4'], [1, 'wood2']].forEach(([s, ty]) => { const [x, y] = SLOTS[s]; seats(ty, x, y).forEach(([sx, sy], k) => person(g, sx, sy, makeLook(s * 10 + k + 3), { sit: true, t: tm + k, mood: 'happy', cheer: (Math.floor(tm / 2) + k) % 5 === 0 })); table(g, x, y, ty); cup(g, x - 20, y - 10, PRODUCTS[1], 0.9); dish(g, x + 22, y - 4, 'noodle', 0.8); }); g.restore(); finish(g, 960, 420); if (Math.random() < 0.04) burst(fx, 200 + Math.random() * 500, 120); particles(g, fx, 0.016); requestAnimationFrame(tick); };
+  const g = $('tcv').getContext('2d'), demo = { size: 3, wall: 'brick', floor: 'plank', tables: [{ slot: 0, type: 'round4' }, { slot: 1, type: 'wood2' }, { slot: 2, type: 'tatami' }], decor: [{ id: 'lantern', spot: 'ceil', at: 0 }, { id: 'lantern', spot: 'ceil', at: 2 }, { id: 'scroll', spot: 'wall', at: 1 }, { id: 'umbrella', spot: 'wall', at: 3 }, { id: 'teaset', spot: 'wall', at: 2 }], menu: ['melon', 'boba', 'lemon', 'braise', 'noodle', 'tgy'], lang: S.lang };
+  const tick = (now) => { if (!$('tcv')) return; const tm = now / 1000; g.save(); g.clearRect(0, 0, 960, 420); g.translate(0, 8); room(g, demo, tm); counter(g, 20, 186, tm, demo); [[0, 'round4'], [1, 'wood2']].forEach(([s, ty]) => { const [x, y] = SLOTS[s]; seats(ty, x, y).forEach(([sx, sy, dir], k) => { chair(g, sx, sy, dir, ty); person(g, sx, sy, makeLook(s * 10 + k + 3), { sit: true, face: dir === 'l' ? 1 : dir === 'r' ? -1 : 0, t: tm + k, mood: 'happy', cheer: (Math.floor(tm / 2) + k) % 5 === 0 }); }); table(g, x, y, ty); cup(g, x - 20, y - 10, PRODUCTS[1], 0.9); dish(g, x + 22, y - 4, 'noodle', 0.8); }); lights(g, demo, tm); g.restore(); finish(g, 960, 420); if (Math.random() < 0.04) burst(fx, 200 + Math.random() * 500, 120); particles(g, fx, 0.016); requestAnimationFrame(tick); };
   requestAnimationFrame(tick);
 }
 function hud() {
@@ -185,10 +140,14 @@ function canvasClick(e) {
   const cv = $('cv'), r = cv.getBoundingClientRect(), x = (e.clientX - r.left) * 960 / r.width, y = (e.clientY - r.top) * cv.height / r.height;
   // placing a decoration: the same boxes as drawn
   if (placing) { const sp = spotsFor(placing.spot); const i = sp.findIndex(([px, py]) => { const top = placing.spot === 'ceil' ? py + 4 : py - 70; return x > px - 34 && x < px + 34 && y > top && y < top + 72; }); placeAt(i); return; }
-  if (visit) return;
-  // a special order: make it yourself for a big tip
-  const g = guests.find((gu) => gu.state === 'order' && gu.special && !gu.taken && Math.abs(gu.x + 40 - x) < 60 && Math.abs(gu.y - 60 - y) < 60);
-  if (g) { g.taken = true; makeDialog(P(g.p), g.special).then((r) => { if (!r) { g.taken = false; return; } if (g.state === 'order') { serve(g, r.score, true); toast(t().bonus(Math.round(r.score * 0.8))); } }); }
+  const sim = visit ? visit.sim : shop, h = sim.hit(x, y);
+  if (!h) return;
+  if (!visit && h.guest && shop.pendingSpecial(h.guest)) {
+    const g = h.guest; shop.takeSpecial(g);
+    makeDialog(P(g.pid), g.special).then((r) => { if (!r) { shop.releaseSpecial(g); return; } if (shop.handServe(g, r.score)) toast(t().bonus(Math.round(r.score * 0.8))); });
+    return;
+  }
+  sim.poke(h);
 }
 
 // ------------------------------------------------------------------ the kitchen: learn and improve recipes
@@ -228,8 +187,8 @@ function shopDialog() {
     <h4>${T.upgrades}</h4>${UPGRADES.map((u) => { const n = S.up[u.id]; return `<div class="line"><span>${u[S.lang]} · ${T.level(n)}</span>${n < u.max ? `<button class="btn" data-up="${u.id}">${money(u.cost(n))}</button>` : '✅'}</div>`; }).join('')}`);
   if ($('sSize')) $('sSize').onclick = () => { if (buy(nextSize.cost)) { S.size++; save(); hud(); shopDialog(); burst(fx, 480, 300, 20); } };
   document.querySelectorAll('[data-tb]').forEach((b) => b.onclick = () => { const tb = TABLES.find((x) => x.id === b.dataset.tb), slot = [...Array(slots).keys()].find((s) => !S.tables.some((x) => x.slot === s)); if (slot === undefined || !buy(tb.cost)) return; S.tables.push({ slot, type: tb.id }); save(); hud(); shopDialog(); });
-  document.querySelectorAll('[data-upg]').forEach((b) => b.onclick = () => { const x = S.tables[+b.dataset.upg], k = TABLES.findIndex((y) => y.id === x.type); if (guests.some((g) => g.seat && g.seat.ti === +b.dataset.upg)) { toast(S.lang === 'zh' ? '有客人坐著，等他們離開' : 'Someone is sitting there: wait till they leave'); return; } if (buy(TABLES[k + 1].cost)) { x.type = TABLES[k + 1].id; save(); hud(); shopDialog(); } });
-  document.querySelectorAll('[data-up]').forEach((b) => b.onclick = () => { const u = UPGRADES.find((x) => x.id === b.dataset.up); if (!buy(u.cost(S.up[u.id]))) return; S.up[u.id]++; if (u.id === 'staff') crew.push({ k: crew.length, state: 'idle', x: 70 + crew.length * 46, y: 198, job: null }); save(); hud(); shopDialog(); });
+  document.querySelectorAll('[data-upg]').forEach((b) => b.onclick = () => { const x = S.tables[+b.dataset.upg], k = TABLES.findIndex((y) => y.id === x.type); if (shop.guests.some((g) => g.seat && g.seat.ti === +b.dataset.upg && !g.gone)) { toast(S.lang === 'zh' ? '有客人坐著，等他們離開' : 'Someone is sitting there: wait till they leave'); return; } if (buy(TABLES[k + 1].cost)) { x.type = TABLES[k + 1].id; save(); hud(); shopDialog(); } });
+  document.querySelectorAll('[data-up]').forEach((b) => b.onclick = () => { const u = UPGRADES.find((x) => x.id === b.dataset.up); if (!buy(u.cost(S.up[u.id]))) return; S.up[u.id]++; if (u.id === 'staff') save(); hud(); shopDialog(); });
 }
 let placing = null;
 function decorDialog() {
@@ -238,7 +197,7 @@ function decorDialog() {
     <h4>${T.floors}</h4><div class="swatches">${FLOORS.map((f) => `<button class="sw ${S.floor === f.id ? 'on' : ''}" data-floor="${f.id}" style="background:${f.c}">${f[S.lang]}<small>${S.floors.includes(f.id) ? '' : money(f.cost)}</small></button>`).join('')}</div>
     <h4>${T.items}</h4><div class="cards">${DECOR.map((d) => `<div class="pc"><canvas data-dc="${d.id}" width="80" height="80"></canvas><b>${d[S.lang]}</b><small>${T.amb} +${d.amb}</small><button class="btn" data-dec="${d.id}">${money(d.cost)}</button></div>`).join('')}</div>
     ${S.decor.length ? `<div class="owned">${S.decor.map((d, i) => `<span>${DECOR.find((x) => x.id === d.id)[S.lang]} <button class="mini" data-rm="${i}">✕</button></span>`).join('')}</div>` : ''}`);
-  import('./art.js?v=1').then((A) => document.querySelectorAll('[data-dc]').forEach((c) => { const g = c.getContext('2d'), d = DECOR.find((x) => x.id === c.dataset.dc); A.decor(g, d.id, 40, d.spot === 'ceil' ? 0 : d.spot === 'wall' ? 40 : 76, 0); }));
+  import('./art.js?v=2').then((A) => document.querySelectorAll('[data-dc]').forEach((c) => { const g = c.getContext('2d'), d = DECOR.find((x) => x.id === c.dataset.dc); A.decor(g, d.id, 40, d.spot === 'ceil' ? 0 : d.spot === 'wall' ? 40 : 76, 0); }));
   document.querySelectorAll('[data-wall]').forEach((b) => b.onclick = () => { const w = WALLS.find((x) => x.id === b.dataset.wall); if (!S.walls.includes(w.id)) { if (!buy(w.cost)) return; S.walls.push(w.id); } S.wall = w.id; save(); hud(); decorDialog(); });
   document.querySelectorAll('[data-floor]').forEach((b) => b.onclick = () => { const f = FLOORS.find((x) => x.id === b.dataset.floor); if (!S.floors.includes(f.id)) { if (!buy(f.cost)) return; S.floors.push(f.id); } S.floor = f.id; save(); hud(); decorDialog(); });
   document.querySelectorAll('[data-dec]').forEach((b) => b.onclick = () => { const d = DECOR.find((x) => x.id === b.dataset.dec); if (S.money < d.cost) { toast(T.noMoney); return; } placing = d; closeDialog(); toast(S.lang === 'zh' ? '點一個綠色框框放上去' : 'Tap a green box to put it there'); });
@@ -277,6 +236,6 @@ setInterval(() => { if (S.name) save(); }, 30000);
 
 (async () => {
   start();
-  try { cloud = await import('/save.js'); if (await cloud.pull(GAME, KEY)) { S = Object.assign(fresh(), JSON.parse(localStorage.getItem(KEY)) || {}); start(); } } catch (e) { cloud = null; }
+  try { cloud = await import('/save.js'); if (await cloud.pull(GAME, KEY)) { S = load(); start(); } } catch (e) { cloud = null; }
 })();
-window.TH = { get S() { return S; }, get guests() { return guests; }, get day() { return day; }, step, kitchen, serve, newDay, makeDialog, startVisit, street };
+window.TH = { get S() { return S; }, get guests() { return shop.guests; }, get day() { return day; }, shop, step, kitchen, newDay, makeDialog, startVisit, street };
