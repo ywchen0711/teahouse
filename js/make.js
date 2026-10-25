@@ -2,8 +2,8 @@
 // right temperature (hold the kettle, let go at the number), brew for the right minutes, strain, add syrup by the pump,
 // pour to the line in ml, ice by the scoop, shake, seal. Every action is written down, then judged against the recipe:
 // the right thing, the right amount, in the right order (steps in one box may go any way round), nothing extra.
-import { ITEMS } from './data.js?v=3';
-import { cup, INK } from './art.js?v=3';
+import { ITEMS } from './data.js?v=4';
+import { cup, INK } from './art.js?v=4';
 
 const SWEET = [0, 0.3, 0.5, 0.7, 1], ICE = [0, 0.3, 0.7, 1];
 // what is on the shelves for this item: every base of its kind (you must know which one), the things the recipe

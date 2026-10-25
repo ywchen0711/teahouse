@@ -3,14 +3,17 @@
 // take the orders at the register, make each one at the counter, carry it over, and clear the table afterwards.
 // Friends chat, raise a toast, take a photo of their drinks; on the way out they wave and the staff thank them.
 // Everyone walks with a stride that matches the ground they cover, along A* paths over a grid of the floor.
-import { SLOTS, seats, roomH, roomW, STREET, DOOR_X, FLOOR_SPOTS, spotShown, makeLook, staffLook, person, table, chair, cup, dish, teapot, decor, cat, scooter, say, frontWall, streetProps, aboard, basket, nameTag, burst } from './art.js?v=3';
-import { PRODUCTS } from './data.js?v=3';
+import { SLOTS, seats, roomH, roomW, STREET, DOOR_X, FLOOR_SPOTS, spotShown, makeLook, staffLook, person, table, chair, cup, dish, teapot, decor, cat, scooter, ride, brolly, streetSign, say, frontWall, streetProps, aboard, basket, nameTag, burst } from './art.js?v=4';
+import { placeOf } from './places.js?v=1';
+import { PRODUCTS } from './data.js?v=4';
 
 const CELL = 20, LANE_Y = 198, EXIT = [300, 216], LANE_END = 276, REG_X = 236;
 const QUEUE = [[244, 306], [244, 350], [244, 394]], PICKUP = [[92, 306], [150, 316]];   // pickup: in front of the counter's left end
 const BY = new Map(PRODUCTS.map((p) => [p.id, p])), P = (id) => BY.get(id);
 const rnd = (a, b) => a + Math.random() * (b - a);
 const pickOne = (a) => a[Math.floor(Math.random() * a.length)];
+// pick with weights (what the city likes to order comes up more often)
+const pickW = (a, w) => { if (!w) return pickOne(a); const ws = a.map(w), sum = ws.reduce((x, y) => x + y, 0); let r = Math.random() * sum; for (let i = 0; i < a.length; i++) { r -= ws[i]; if (r <= 0) return a[i]; } return a[a.length - 1]; };
 
 // ------------------------------------------------------------------ the floor as a grid, and paths over it
 function buildGrid(st) {
@@ -75,6 +78,7 @@ function walk(e, dt, sp) {
 // ------------------------------------------------------------------ the shop's day
 export class Sim {
   // o: st(), menu(), T(), best(pid), appeal(), foot(), staffN(), gear(), cat(), open(), special(p), onServe(g, score, byHand), onAngry(g), onEnter(g), fx
+  //    and for the city: patience(), toGo(), weight(p), stay(), weather() (all optional)
   constructor(o) { this.o = o; this.reset(); }
   reset() { this.guests = []; this.walkers = []; this.crew = []; this.orders = []; this.queue = []; this.seatSt = {}; this.says = []; this.scoots = []; this.catE = null; this.later = []; this.t = 0; this.ring = 0; this.gridKey = ''; this.nextWalk = 0.5; this.nextScoot = 2; this.syncCrew(); }
   get fx() { return this.o.fx; }
@@ -97,8 +101,8 @@ export class Sim {
     this.nextWalk -= dt;
     if (this.nextWalk <= 0) { this.nextWalk = rnd(1.5, 3.0) / Math.max(0.2, this.o.foot()); this.spawnWalkers(); }
     this.nextScoot -= dt;
-    if (this.nextScoot <= 0) { this.nextScoot = rnd(5, 12); const dir = Math.random() < 0.5 ? 1 : -1; this.scoots.push({ x: dir > 0 ? -60 : 1020, y: H + (dir > 0 ? 82 : 76), dir, sp: rnd(150, 220), look: makeLook(Math.random() * 1e6 | 0) }); }
-    for (const s of this.scoots) s.x += s.dir * s.sp * dt; this.scoots = this.scoots.filter((s) => s.x > -80 && s.x < 1040);
+    if (this.nextScoot <= 0) { const place = this.o.st().place, kind = pickOne(placeOf(place).look.rides), big = kind === 'bus', dir = Math.random() < 0.5 ? 1 : -1; this.nextScoot = rnd(5, 12) * (big ? 2 : 1); this.scoots.push({ kind, basket: Math.random() < 0.4, x: dir > 0 ? -100 : 1060, y: H + (dir > 0 ? 82 : 76), dir, sp: big ? rnd(90, 120) : kind === 'bike' ? rnd(80, 110) : rnd(150, 220), look: makeLook(Math.random() * 1e6 | 0, place) }); }
+    for (const s of this.scoots) s.x += s.dir * s.sp * dt; this.scoots = this.scoots.filter((s) => s.x > -110 && s.x < 1070);
     for (const w of this.walkers) {
       if (w.path && w.path.length) { walk(w, dt, w.sp); continue; }
       w.x += w.dir * w.sp * dt; w.phase += w.sp * dt / 4.6; w.moving = true; w.face = w.dir; w.back = false;
@@ -119,7 +123,7 @@ export class Sim {
   }
   spawnWalkers() {
     const H = this.doorY(), dir = Math.random() < 0.5 ? 1 : -1, n = Math.random() < 0.6 ? 1 : Math.random() < 0.75 ? 2 : 3, lane = H + rnd(4, 16), group = [];
-    for (let j = 0; j < n; j++) { const L = makeLook(Math.random() * 1e6 | 0); const w = { look: L, x: (dir > 0 ? -30 : 990) - dir * j * 30, y: lane + (j % 2 ? 9 : 0), dir, sp: L.old ? rnd(42, 52) : L.kid ? rnd(72, 84) : rnd(58, 74), phase: Math.random() * 6, face: dir, lead: j === 0, group }; group.push(w); this.walkers.push(w); }
+    for (let j = 0; j < n; j++) { const L = makeLook(Math.random() * 1e6 | 0, this.o.st().place); const w = { look: L, x: (dir > 0 ? -30 : 990) - dir * j * 30, y: lane + (j % 2 ? 9 : 0), dir, sp: L.old ? rnd(42, 52) : L.kid ? rnd(72, 84) : rnd(58, 74), phase: Math.random() * 6, face: dir, lead: j === 0, group }; group.push(w); this.walkers.push(w); }
     group.forEach((w) => { w.sp = group[0].sp; });   // friends keep pace with each other
   }
   // a group at the door: do they come in? Only if there's something on the menu, room in the queue and seats (or it's to go)
@@ -131,14 +135,14 @@ export class Sim {
     const free = this.seatList().filter((s) => { const ss = this.seatState(s); return !ss.by && !ss.dirty; });
     const byTable = {}; free.forEach((s) => (byTable[s.ti] = byTable[s.ti] || []).push(s));
     const tableFit = Object.values(byTable).find((list) => list.length >= group.length);
-    if (group.length === 1 && drinks.length && pickups < 2 && Math.random() < 0.28) takeaway = true;
+    if (group.length === 1 && drinks.length && pickups < 2 && Math.random() < (o.toGo ? o.toGo() : 0.28)) takeaway = true;
     else if (tableFit) seatsFor = tableFit.slice(0, group.length);
     else if (group.length === 1 && drinks.length && pickups < 2) takeaway = true;
     else return;
     const H = this.doorY(), T = o.T();
     group.forEach((w, j) => {
       w.inside = true;
-      const p = takeaway ? pickOne(drinks) : pickOne(m), seat = seatsFor ? seatsFor[j] : null;
+      const p = takeaway ? pickW(drinks, o.weight) : pickW(m, o.weight), seat = seatsFor ? seatsFor[j] : null;
       const g = { id: Math.random(), look: w.look, x: w.x, y: w.y, face: w.dir, phase: w.phase, sp: w.sp, path: [[DOOR_X + (w.x - DOOR_X) * 0.2, H + 30], [DOOR_X, H + 4], [DOOR_X, H - 26]], state: 'enter', pid: p.id, takeaway, seat, group: null, pat: 0, eat: 0, mood: 'wait' };
       if (seat) this.seatState(seat).by = g;
       w.guest = g; this.guests.push(g); this.queue.push(g); o.onEnter(g);
@@ -147,7 +151,7 @@ export class Sim {
     this.ring = 1.6;
     const c = this.crew.find((x) => x.y <= LANE_Y + 4) || this.crew[0]; if (c) this.say(c, T.say.welcome(), 2);
   }
-  limit(g) { return g.friend ? Infinity : g.special ? 75 : 55; }
+  limit(g) { return g.friend ? Infinity : (g.special ? 75 : 55) * (this.o.patience ? this.o.patience() : 1); }
   stepGuest(g, dt, H, T) {
     const o = this.o;
     if (g.state === 'enter' || g.state === 'toQueue' || g.state === 'queue' || g.state === 'atReg') g.pat += dt * 0.5;
@@ -216,7 +220,7 @@ export class Sim {
   deliver(g, score, byHand, T) {
     if (g.served || g.angry || g.gone) return false;
     this.orders = this.orders.filter((x) => x.g !== g);
-    g.served = true; g.mood = 'happy'; g.score = score; g.eat = 0; g.dur = P(g.pid).kind === 'food' ? rnd(15, 20) : rnd(11, 16); g.chatT = rnd(1.5, 3);
+    g.served = true; g.mood = 'happy'; g.score = score; g.eat = 0; g.dur = (P(g.pid).kind === 'food' ? rnd(15, 20) : rnd(11, 16)) * (this.o.stay ? this.o.stay() : 1); g.chatT = rnd(1.5, 3);
     if (g.state === 'wait' || (g.friend && g.state === 'pickup')) g.state = g.seat ? 'drink' : 'pickup';
     this.o.onServe(g, score, byHand);
     this.after(0.9, () => { if (!g.gone && !g.takeaway) { if (Math.random() < 0.2) { this.say(g, T.say.photo, 1.6); this.fx.push({ kind: 'flash', x: g.x, y: g.y - 30, vx: 0, vy: 0, t: 0, life: 0.4, rot: 0, spin: 0 }); } else this.say(g, T.say.yum(g.pid), 2); } });
@@ -357,13 +361,14 @@ export class Sim {
       const seated = gu.state === 'sit' || gu.state === 'wait' || gu.state === 'drink';
       items.push({ y: seated ? gu.seat.y - 1 : gu.y + 30, f: () => person(g, seated ? gu.seat.x : gu.x, seated ? gu.seat.y : gu.y, gu.look, { t: time + gu.id * 9, sit: seated, moving: !seated && gu.moving, phase: gu.phase, face: seated ? (gu.seat.dir === 'l' ? 1 : gu.seat.dir === 'r' ? -1 : 0) : gu.face, back: !seated && gu.back, mood: gu.state === 'drink' ? 'happy' : gu.mood, cheer: gu.cheerT > 0 || (gu.state === 'drink' && gu.eat < 1), wave: gu.wave > 0, talk: this.says.some((s) => s.e === gu && s.t < 1.2) }) });
     }
-    for (const w of this.walkers) items.push({ y: w.y + 30, f: () => person(g, w.x, w.y, w.look, { t: time, moving: true, phase: w.phase, face: w.face }) });
+    const wet = this.o.weather && this.o.weather() === 'rain';
+    for (const w of this.walkers) items.push({ y: w.y + 30, f: () => { person(g, w.x, w.y, w.look, { t: time, moving: true, phase: w.phase, face: w.face }); if (wet) brolly(g, w.x, w.y, w.look.bag || ['#2a2a30', '#3a5a8a', '#c83a3a', '#5a7a4a'][Math.floor(w.look.blink * 10) % 4]); } });
     for (const c of this.crew) if (c.y > LANE_Y + 4) items.push({ y: c.y + 30, f: () => this.drawCrew(g, c, time) });
     if (this.catE) { const k = this.catE; items.push({ y: k.y, f: () => cat(g, k.x, k.y, { state: k.state, face: k.face || 1, phase: k.phase, t: time }) }); }
     (st.decor || []).forEach((d) => { if (d.spot !== 'floor' || !spotShown(st, 'floor', d.at)) return; const [x, y] = FLOOR_SPOTS[d.at]; items.push({ y, f: () => decor(g, d.id, x, y, time) }); });
     items.push({ y: H + 8, f: () => frontWall(g, st, time, this.ring) });
-    for (const pr of streetProps(st)) items.push({ y: pr.y, f: () => (pr.id === 'aboard' ? aboard(g, pr.x, pr.y, view || st) : pr.id === 'basket' ? basket(g, pr.x, pr.y, pr.name, time) : decor(g, 'plant', pr.x, pr.y, time)) });
-    for (const s of this.scoots) items.push({ y: s.y + 10, f: () => scooter(g, s.x, s.y, s.dir, s.look, time) });
+    for (const pr of streetProps(st)) items.push({ y: pr.y, f: () => (pr.id === 'aboard' ? aboard(g, pr.x, pr.y, view || st) : pr.id === 'basket' ? basket(g, pr.x, pr.y, pr.name, time) : pr.id === 'sign' ? streetSign(g, pr.x, pr.y, view || st) : decor(g, 'plant', pr.x, pr.y, time)) });
+    for (const s of this.scoots) items.push({ y: s.y + 10, f: () => ride(g, s, time) });
     items.sort((a, b) => a.y - b.y).forEach((it) => it.f());
   }
   drawOver(g, time) {

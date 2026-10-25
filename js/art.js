@@ -3,7 +3,8 @@
 // warm vignette over everything, lantern light, hearts and confetti when someone is happy. The shop opens onto a
 // little street at the bottom: a red-brick pavement and an alley road where people and scooters go by.
 // All drawn on a canvas, nothing loaded.
-import { WALLS, FLOORS, PRODUCTS } from './data.js?v=3';
+import { WALLS, FLOORS, PRODUCTS } from './data.js?v=4';
+import { placeOf } from './places.js?v=1';
 
 export const INK = '#4a3426';
 const rnd = (a, b) => a + Math.random() * (b - a);
@@ -58,10 +59,8 @@ export function room(g, st, t) {
   for (let k = 0; k < 3; k++) { g.beginPath(); g.moveTo(24 + k * 34, 22); g.lineTo(56 + k * 34, 22); g.lineTo(56 + k * 34 + sway, 96); g.lineTo(24 + k * 34 + sway, 96); g.closePath(); path(g, '#3a5a7a', INK, 1.5); }
   g.fillStyle = '#f4ead4'; g.font = '700 18px "Noto Serif TC", serif'; g.textAlign = 'center'; g.fillText('茶', 74, 64);
   menuBoard(g, st, t);
-  // the window onto the back alley, warm afternoon light
-  { const x = 545, w = 105; g.fillStyle = '#5a3a24'; g.fillRect(x - 6, 22, w + 12, 98); const lg = g.createLinearGradient(0, 28, 0, 116); lg.addColorStop(0, '#ffe8b8'); lg.addColorStop(1, '#f0b870'); g.fillStyle = lg; g.fillRect(x, 28, w, 86);
-    g.fillStyle = 'rgba(150,110,80,0.45)'; g.fillRect(x, 70, 30, 44); g.fillRect(x + 66, 60, 39, 54); g.fillStyle = 'rgba(90,130,70,0.6)'; ell(g, x + 48, 104, 20, 12); g.fill();
-    g.fillStyle = '#5a3a24'; g.fillRect(x + w / 2 - 2, 28, 5, 86); g.fillRect(x, 69, w, 4); g.fillStyle = '#6a4226'; g.fillRect(x - 10, 118, w + 20, 7); }
+  // the window onto the city outside
+  windowView(g, st, t);
   // the floor
   g.fillStyle = floor; g.fillRect(0, 179, RW, H - 179);
   if (st.floor === 'tile') { for (let y = 179; y < H; y += 34) for (let x = 0; x < RW; x += 34) { g.fillStyle = ((x + y) / 34) % 2 ? 'rgba(255,255,255,0.08)' : 'rgba(60,40,30,0.06)'; g.fillRect(x, y, 34, 34); for (let k = 0; k < 4; k++) { g.fillStyle = 'rgba(80,60,50,0.35)'; g.fillRect(x + hash(x * 7 + y, k) * 30, y + hash(x + y * 3, k) * 30, 2, 2); } } }
@@ -112,16 +111,19 @@ export function counter(g, x, y, t, st) {
 
 // ------------------------------------------------------------------ the street outside and the shop front
 export function street(g, st, t) {
-  const H = roomH(st.size), W = 960;
-  // the red-brick pavement
-  g.fillStyle = '#b86c50'; g.fillRect(0, H, W, 62);
-  g.strokeStyle = 'rgba(80,30,20,0.35)'; g.lineWidth = 1.2;
-  for (let r = 0, y = H; y < H + 62; y += 12, r++) { g.beginPath(); g.moveTo(0, y); g.lineTo(W, y); g.stroke(); for (let x = r % 2 ? 0 : 14; x < W; x += 28) { g.beginPath(); g.moveTo(x, y); g.lineTo(x, y + 12); g.stroke(); } }
+  const H = roomH(st.size), W = 960, L = placeOf(st.place).look;
+  // the pavement: red brick in Taipei, big slabs in London and New York, cobbles in Paris, square tiles elsewhere
+  g.fillStyle = L.pave; g.fillRect(0, H, W, 62);
+  g.strokeStyle = L.paveLine; g.lineWidth = 1.2;
+  if (L.brick) for (let r = 0, y = H; y < H + 62; y += 12, r++) { g.beginPath(); g.moveTo(0, y); g.lineTo(W, y); g.stroke(); for (let x = r % 2 ? 0 : 14; x < W; x += 28) { g.beginPath(); g.moveTo(x, y); g.lineTo(x, y + 12); g.stroke(); } }
+  else if (L.slabs) for (let r = 0, y = H; y < H + 62; y += 31, r++) for (let x = r % 2 ? -23 : 0; x < W; x += 46) { g.strokeRect(x, y, 46, 31); if (hash(x, r) < 0.2) { g.fillStyle = 'rgba(0,0,0,0.05)'; g.fillRect(x, y, 46, 31); } }
+  else if (L.cobble) for (let r = 0, y = H + 4; y < H + 62; y += 9, r++) for (let x = r % 2 ? 6 : 0; x < W; x += 12) { ell(g, x, y, 5.4, 3.8); g.fillStyle = hash(x, r) < 0.5 ? 'rgba(255,240,220,0.07)' : 'rgba(0,0,0,0.06)'; g.fill(); g.stroke(); }
+  else for (let y = H; y < H + 62; y += 31) { g.beginPath(); g.moveTo(0, y); g.lineTo(W, y); g.stroke(); for (let x = 0; x < W; x += 31) { g.beginPath(); g.moveTo(x, y); g.lineTo(x, y + 31); g.stroke(); } }
   for (let k = 0; k < 30; k++) { g.fillStyle = 'rgba(255,220,190,0.08)'; g.fillRect(hash(k, 7) * W, H + hash(k, 8) * 60, 28, 12); }
-  // the kerb with its red no-parking line, then the alley road
-  g.fillStyle = '#d8d0c0'; g.fillRect(0, H + 62, W, 6); g.fillStyle = '#c83a2a'; g.fillRect(0, H + 66, W, 3);
-  g.fillStyle = '#5a5a5e'; g.fillRect(0, H + 69, W, STREET - 69); g.fillStyle = 'rgba(255,255,255,0.08)'; for (let k = 0; k < 40; k++) g.fillRect(hash(k, 3) * W, H + 70 + hash(k, 4) * 24, 3, 2);
-  g.fillStyle = '#e8e0c0'; for (let x = 0; x < W; x += 60) g.fillRect(x + 10, H + 86, 30, 3);
+  // the kerb (with a red no-parking line in Taipei), then the road
+  g.fillStyle = '#d8d0c0'; g.fillRect(0, H + 62, W, 6); g.fillStyle = L.kerb; g.fillRect(0, H + 66, W, 3);
+  g.fillStyle = L.road; g.fillRect(0, H + 69, W, STREET - 69); g.fillStyle = 'rgba(255,255,255,0.08)'; for (let k = 0; k < 40; k++) g.fillRect(hash(k, 3) * W, H + 70 + hash(k, 4) * 24, 3, 2);
+  g.fillStyle = L.lines || '#e8e0c0'; for (let x = 0; x < W; x += 60) g.fillRect(x + 10, H + 86, 30, 3);
   // the shop front: a low wooden wall along the pavement with the door (sorted with the people, see frontWall)
 }
 export function frontWall(g, st, t, ring) {
@@ -136,7 +138,7 @@ export function frontWall(g, st, t, ring) {
   ell(g, b - 3 + sw * 0.3, H - 46, 5, 5); path(g, 'rgba(200,230,250,0.8)', INK, 1); g.strokeStyle = '#c83a2a'; g.beginPath(); g.moveTo(b - 3 + sw * 0.3, H - 41); g.lineTo(b - 3 + sw, H - 30); g.stroke(); g.fillStyle = '#f4ead0'; g.fillRect(b - 6 + sw, H - 30, 7, 10);
 }
 // things standing out on the pavement: a menu board and a plant by the door
-export function streetProps(st) { const H = roomH(st.size); return [{ id: 'aboard', x: DOOR_X + 96, y: H + 40 }, { id: 'plant', x: DOOR_X - 80, y: H + 40 }, ...(st.baskets || []).slice(-4).map((b, i) => ({ id: 'basket', name: b.from, x: DOOR_X + 200 + i * 60, y: H + 46 }))]; }
+export function streetProps(st) { const H = roomH(st.size); return [{ id: 'aboard', x: DOOR_X + 96, y: H + 40 }, { id: 'sign', x: DOOR_X - 140, y: H + 30 }, { id: 'plant', x: DOOR_X - 80, y: H + 40 }, ...(st.baskets || []).slice(-4).map((b, i) => ({ id: 'basket', name: b.from, x: DOOR_X + 200 + i * 60, y: H + 46 }))]; }
 // an opening flower basket (花籃) from a friend: a tall stand of flowers with a red ribbon carrying their name
 export function basket(g, x, y, name, t) {
   g.fillStyle = 'rgba(40,20,10,0.25)'; ell(g, x, y + 2, 20, 5); g.fill();
@@ -243,9 +245,10 @@ export function seats(type, x, y) {
 // ------------------------------------------------------------------ people
 const SKIN = ['#f6dcc0', '#f0cca8', '#e8bc94', '#dcae84', '#c89870'], HAIRC = ['#2a1e18', '#4a3020', '#6a4428', '#8a6040', '#3a3a42', '#1e1a18'];
 const TOPS = ['#c85a4a', '#5a7a9a', '#e8d0a0', '#6a8a5a', '#8a6aa0', '#3a3a42', '#d8a040', '#f4f0e8', '#4a6a8a', '#e89a8a', '#7a9ab0'], PANTS = ['#3a3a48', '#4a5a7a', '#5a4a3a', '#2a2a30', '#8a7a68', '#6a3a3a'];
-export function makeLook(seed) {
-  const h = (k) => hash(seed, k), kid = h(9) < 0.12, old = !kid && h(7) < 0.16;
-  return { skin: SKIN[(h(1) * 5) | 0], hair: ['short', 'long', 'bun', 'bald', 'spiky', 'bob', 'cap', 'side', 'pony'][(h(2) * 9) | 0], hairC: HAIRC[(h(3) * 6) | 0], top: TOPS[(h(4) * 11) | 0], pants: PANTS[(h(10) * 6) | 0],
+const SKIN_W = [...SKIN, '#fae8dc', '#f8e0d0', '#a06a48', '#6a4430'], HAIR_W = [...HAIRC, '#d8b868', '#b86a3a', '#e8d8a0'];
+export function makeLook(seed, place) {
+  const h = (k) => hash(seed, k), kid = h(9) < 0.12, old = !kid && h(7) < 0.16, far = place === 'london' || place === 'paris' || place === 'nyc', SK = far ? SKIN_W : SKIN, HC = far ? HAIR_W : HAIRC;
+  return { skin: SK[(h(1) * SK.length) | 0], hair: ['short', 'long', 'bun', 'bald', 'spiky', 'bob', 'cap', 'side', 'pony'][(h(2) * 9) | 0], hairC: HC[(h(3) * HC.length) | 0], top: TOPS[(h(4) * 11) | 0], pants: PANTS[(h(10) * 6) | 0],
     pattern: h(11) < 0.2 ? 'stripe' : h(11) < 0.3 ? 'collar' : '', bag: h(12) < 0.22 ? ['#8a5a34', '#c85a4a', '#3a5a7a'][(h(13) * 3) | 0] : null, glasses: h(5) < 0.25, shades: h(5) > 0.95, stache: !kid && h(6) < 0.14, old, kid, eyes: h(8) < 0.6 ? 'happy' : 'dot', blink: h(14) * 4, helmet: ['#e8d040', '#c83a2a', '#f4f0e8', '#3a6a9a'][(h(15) * 4) | 0] };
 }
 // a chibi: big round head, small body. Standing with a proper stride when walking (legs and arms swing with the
@@ -413,6 +416,7 @@ export function decor(g, id, x, y, t = 0) {
   if (id === 'screen') { g.fillStyle = 'rgba(50,30,15,0.22)'; ell(g, x, y + 3, 56, 6); g.fill(); for (let k = 0; k < 3; k++) { rrect(g, x - 51 + k * 34, y - 90, 32, 92, 3); path(g, '#9a6438', INK, 2); rrect(g, x - 46 + k * 34, y - 84, 22, 78, 2); path(g, '#f4e8cc', INK, 1.2); g.strokeStyle = 'rgba(120,80,40,0.6)'; g.lineWidth = 1; for (let r = 1; r < 5; r++) { g.beginPath(); g.moveTo(x - 46 + k * 34, y - 84 + r * 15.6); g.lineTo(x - 24 + k * 34, y - 84 + r * 15.6); g.stroke(); } } return; }
   if (id === 'radio') { g.fillStyle = '#6a4426'; g.fillRect(x - 34, y + 20, 68, 5); rrect(g, x - 30, y - 16, 60, 36, 8); path(g, '#b07a48', INK, 2); rrect(g, x - 24, y - 10, 30, 24, 4); path(g, '#e8d4a8', INK, 1.2); g.strokeStyle = 'rgba(90,60,30,0.6)'; for (let k = 0; k < 4; k++) { g.beginPath(); g.moveTo(x - 22, y - 6 + k * 6); g.lineTo(x + 4, y - 6 + k * 6); g.stroke(); } for (let k = 0; k < 2; k++) { ell(g, x + 16, y - 6 + k * 12, 4, 4); path(g, '#5a3418', INK, 1.2); } const n = (t * 2) % 1; g.fillStyle = `rgba(74,52,38,${1 - n})`; g.font = '14px serif'; g.fillText('♪', x + 34 + n * 10, y - 18 - n * 16); return; }
   if (id === 'aboard') return;
+  souvenir(g, id, x, y, t);
 }
 
 // ------------------------------------------------------------------ hearts and confetti
@@ -432,4 +436,163 @@ export function particles(g, list, dt) {
 export function burst(list, x, y, n = 8) {
   const cols = ['#e84a5a', '#5ab8c8', '#e8b830', '#8ac85a', '#c87ad8'];
   for (let k = 0; k < n; k++) list.push({ kind: k % 3 === 0 ? 'heart' : 'conf', x, y, vx: rnd(-50, 50), vy: rnd(-90, -30), t: 0, life: rnd(0.9, 1.6), rot: rnd(0, 6), spin: rnd(-4, 4), color: cols[k % cols.length] });
+}
+
+// ------------------------------------------------------------------ the city outside: the view from the window, the weather, what drives by
+// the back window looks out over the city the shop is in
+function windowView(g, st, t) {
+  const x = 545, w = 105, v = placeOf(st.place).look.view, rain = st.weather === 'rain', dark = (a) => `rgba(60,40,50,${a})`;
+  g.fillStyle = '#5a3a24'; g.fillRect(x - 6, 22, w + 12, 98);
+  g.save(); g.beginPath(); g.rect(x, 28, w, 86); g.clip();
+  const sky = { taipei: ['#ffe8b8', '#f0b870'], bangkok: ['#2a2458', '#8a3a6a'], tokyo: ['#c8e0f4', '#f8e4d8'], london: rain ? ['#8a9098', '#b8bcc0'] : ['#c4d0dc', '#ece4d4'], paris: ['#c8d8f0', '#f8d8c8'], nyc: ['#f8b060', '#d8604a'] }[v] || ['#ffe8b8', '#f0b870'];
+  const lg = g.createLinearGradient(0, 28, 0, 116); lg.addColorStop(0, sky[0]); lg.addColorStop(1, sky[1]); g.fillStyle = lg; g.fillRect(x, 28, w, 86);
+  if (v === 'taipei') {
+    // Taipei 101 rising behind the old roofs
+    g.fillStyle = 'rgba(110,120,110,0.55)'; for (let k = 0; k < 7; k++) { const y = 104 - k * 10, bw = 16 - k * 0.6; g.beginPath(); g.moveTo(x + 50 - bw / 2 + 2, y); g.lineTo(x + 50 + bw / 2 - 2, y); g.lineTo(x + 50 + bw / 2, y - 10); g.lineTo(x + 50 - bw / 2, y - 10); g.closePath(); g.fill(); }
+    g.fillRect(x + 48, 24, 4, 12);
+    g.fillStyle = 'rgba(150,110,80,0.45)'; g.fillRect(x, 70, 30, 44); g.fillRect(x + 66, 60, 39, 54); g.fillStyle = 'rgba(90,130,70,0.6)'; ell(g, x + 48, 104, 20, 12); g.fill();
+  } else if (v === 'bangkok') {
+    // night: stars, a golden temple spire, a palm, strings of market lights
+    g.fillStyle = '#fff8d0'; for (let k = 0; k < 9; k++) { const tw = 0.5 + 0.5 * Math.sin(t * 2 + k * 3); g.globalAlpha = tw; g.fillRect(x + hash(k, 21) * w, 30 + hash(k, 22) * 36, 2, 2); } g.globalAlpha = 1;
+    g.fillStyle = '#e8b040'; for (let k = 0; k < 5; k++) { const bw = 30 - k * 6, y = 112 - k * 12; g.fillRect(x + 34 - bw / 2, y - 12, bw, 12); } g.beginPath(); g.moveTo(x + 31, 52); g.lineTo(x + 34, 30); g.lineTo(x + 37, 52); g.fill();
+    g.fillStyle = 'rgba(30,20,40,0.8)'; g.fillRect(x + 86, 70, 4, 44); for (let k = 0; k < 5; k++) { g.save(); g.translate(x + 88, 70); g.rotate(-1.6 + k * 0.7); ell(g, 14, 0, 14, 4); g.fill(); g.restore(); }
+    for (let k = 0; k < 8; k++) { const lx = x + 4 + k * 14, ly = 84 + Math.sin(k / 7 * Math.PI) * 8; g.fillStyle = ['#ff6a6a', '#ffd040', '#6ad0ff', '#a0ff80'][k % 4]; ell(g, lx, ly, 2.5, 2.5); g.fill(); }
+  } else if (v === 'tokyo') {
+    // Tokyo Tower, tiled roofs, a petal or two drifting by
+    g.strokeStyle = '#e04a2a'; g.lineWidth = 2; const cx = x + 70; g.beginPath(); g.moveTo(cx - 18, 114); g.lineTo(cx - 2, 36); g.lineTo(cx + 2, 36); g.lineTo(cx + 18, 114); g.stroke();
+    for (const [y, ww] of [[60, 9], [80, 13], [98, 16]]) { g.fillStyle = y === 80 ? '#f4f0e8' : '#e04a2a'; g.fillRect(cx - ww / 2, y, ww, 5); }
+    g.strokeStyle = '#e04a2a'; g.lineWidth = 1; for (let y = 44; y < 112; y += 8) { const ww = (y - 36) * 0.23; g.beginPath(); g.moveTo(cx - ww, y); g.lineTo(cx + ww, y + 8); g.moveTo(cx + ww, y); g.lineTo(cx - ww, y + 8); g.stroke(); }
+    g.fillRect(cx - 1, 26, 2, 12);
+    g.fillStyle = 'rgba(70,80,100,0.75)'; for (const [rx, ry, rw] of [[x - 4, 96, 44], [x + 84, 100, 30]]) { g.beginPath(); g.moveTo(rx, ry + 18); g.lineTo(rx + 6, ry); g.lineTo(rx + rw - 6, ry); g.lineTo(rx + rw, ry + 18); g.fill(); }
+    g.fillStyle = '#f8c8d8'; for (let k = 0; k < 3; k++) { const p = (t * 0.15 + k / 3) % 1; ell(g, x + ((k * 37 + p * 60) % w), 30 + p * 84, 2.5, 1.5); g.fill(); }
+  } else if (v === 'london') {
+    // Big Ben, chimneys, a grey sky
+    const cx = x + 32; g.fillStyle = '#8a7a5a'; g.fillRect(cx - 8, 46, 16, 70); g.beginPath(); g.moveTo(cx - 9, 46); g.lineTo(cx, 26); g.lineTo(cx + 9, 46); g.fill();
+    ell(g, cx, 56, 6, 6); path(g, '#f4ead0', '#4a3a2a', 1); g.strokeStyle = '#2a2018'; g.lineWidth = 1; g.beginPath(); g.moveTo(cx, 56); g.lineTo(cx, 52); g.moveTo(cx, 56); g.lineTo(cx + 3, 57); g.stroke();
+    g.fillStyle = 'rgba(80,70,70,0.7)'; g.fillRect(x + 52, 78, 53, 40); g.fillRect(x + 60, 68, 6, 12); g.fillRect(x + 84, 66, 6, 14); g.fillRect(x - 2, 92, 22, 24);
+  } else if (v === 'paris') {
+    // the Eiffel Tower over the zinc roofs
+    const cx = x + 54; g.fillStyle = '#6a5a4a';
+    g.beginPath(); g.moveTo(cx - 24, 114); g.quadraticCurveTo(cx - 6, 84, cx - 3, 40); g.lineTo(cx, 28); g.lineTo(cx + 3, 40); g.quadraticCurveTo(cx + 6, 84, cx + 24, 114); g.lineTo(cx + 13, 114); g.quadraticCurveTo(cx, 96, cx - 13, 114); g.closePath(); g.fill();
+    g.fillRect(cx - 10, 84, 20, 3); g.fillRect(cx - 5, 62, 10, 2);
+    g.fillStyle = 'rgba(90,110,130,0.8)'; for (const [rx, rw] of [[x - 4, 34], [x + 78, 32]]) { g.beginPath(); g.moveTo(rx, 116); g.lineTo(rx, 98); g.lineTo(rx + 6, 90); g.lineTo(rx + rw - 6, 90); g.lineTo(rx + rw, 98); g.lineTo(rx + rw, 116); g.fill(); }
+  } else if (v === 'nyc') {
+    // skyscrapers at sunset, windows coming on
+    for (const [bx, bw, bh, c] of [[-2, 20, 70, '#4a3a5a'], [16, 18, 50, '#5a4a6a'], [38, 22, 84, '#3a2a4a'], [62, 16, 58, '#4a3a5a'], [80, 26, 76, '#3a3050']]) {
+      g.fillStyle = c; g.fillRect(x + bx, 116 - bh, bw, bh);
+      g.fillStyle = '#ffd890'; for (let r = 0; r < bh / 7 - 1; r++) for (let q = 0; q < bw / 6 - 1; q++) if (hash(bx * 31 + r, q) < 0.4) g.fillRect(x + bx + 3 + q * 6, 120 - bh + r * 7, 2, 3);
+    }
+    g.fillStyle = '#3a2a4a'; g.fillRect(x + 48, 24, 2, 10); g.fillRect(x + 46, 32, 6, 4);
+  }
+  if (rain) { g.strokeStyle = 'rgba(230,240,255,0.55)'; g.lineWidth = 1; for (let k = 0; k < 18; k++) { const p = (t * 1.6 + hash(k, 31)) % 1, rx = x + hash(k, 32) * w; g.beginPath(); g.moveTo(rx, 28 + p * 86); g.lineTo(rx - 2, 36 + p * 86); g.stroke(); } }
+  g.restore();
+  g.fillStyle = '#5a3a24'; g.fillRect(x + w / 2 - 2, 28, 5, 86); g.fillRect(x, 69, w, 4); g.fillStyle = '#6a4226'; g.fillRect(x - 10, 118, w + 20, 7);
+}
+// over everything outside: the market lights at night, or rain coming down on the street
+export function weather(g, st, t) {
+  const H = roomH(st.size), W = 960, L = placeOf(st.place).look;
+  if (L.night) {
+    g.fillStyle = 'rgba(30,20,60,0.32)'; g.fillRect(0, H + 8, W, STREET);
+    g.save(); g.globalCompositeOperation = 'lighter';
+    for (let k = 0; k < 24; k++) { const lx = k * 42 + 10, ly = H + 14 + Math.sin(((k % 6) / 5) * Math.PI) * 6, c = ['255,110,110', '255,210,80', '110,210,255', '160,255,130'][k % 4], fl = 0.7 + 0.3 * Math.sin(t * 3 + k);
+      const gr = g.createRadialGradient(lx, ly, 1, lx, ly, 18); gr.addColorStop(0, `rgba(${c},${0.5 * fl})`); gr.addColorStop(1, `rgba(${c},0)`); g.fillStyle = gr; g.fillRect(lx - 18, ly - 18, 36, 36); }
+    g.restore();
+    g.strokeStyle = 'rgba(40,30,30,0.7)'; g.lineWidth = 1; g.beginPath(); for (let k = 0; k < 24; k++) { const lx = k * 42 + 10, ly = H + 14 + Math.sin(((k % 6) / 5) * Math.PI) * 6; k ? g.lineTo(lx, ly) : g.moveTo(lx, ly); } g.stroke();
+    for (let k = 0; k < 24; k++) { const lx = k * 42 + 10, ly = H + 14 + Math.sin(((k % 6) / 5) * Math.PI) * 6; g.fillStyle = ['#ff8a8a', '#ffe070', '#8ae0ff', '#b0ff90'][k % 4]; ell(g, lx, ly + 2, 3, 3.5); g.fill(); }
+  }
+  if (st.weather === 'rain') {
+    g.fillStyle = 'rgba(70,80,100,0.16)'; g.fillRect(0, H + 8, W, STREET);
+    g.fillStyle = 'rgba(200,220,240,0.22)'; for (let k = 0; k < 7; k++) { ell(g, hash(k, 41) * W, H + 30 + hash(k, 42) * 56, 20 + hash(k, 43) * 24, 3); g.fill(); }
+    g.strokeStyle = 'rgba(220,230,250,0.5)'; g.lineWidth = 1.2;
+    for (let k = 0; k < 90; k++) { const p = (t * 1.3 + hash(k, 44)) % 1, rx = hash(k, 45) * W, ry = H - 60 + p * (STREET + 60); g.beginPath(); g.moveTo(rx, ry); g.lineTo(rx - 3, ry + 12); g.stroke(); }
+    for (let k = 0; k < 6; k++) { const p = (t * 2 + hash(k, 46)) % 1; g.strokeStyle = `rgba(220,230,250,${0.6 * (1 - p)})`; g.beginPath(); g.ellipse(hash(k + Math.floor(t * 2 + hash(k, 46)), 47) * W, H + 40 + hash(k, 48) * 50, 2 + p * 8, 1 + p * 2, 0, 0, 7); g.stroke(); }
+  }
+}
+// an umbrella over someone walking in the rain
+export function brolly(g, x, y, c) {
+  g.strokeStyle = INK; g.lineWidth = 1.6; g.beginPath(); g.moveTo(x + 4, y - 96); g.lineTo(x + 4, y - 48); g.stroke();
+  g.beginPath(); g.moveTo(x - 28, y - 92); g.quadraticCurveTo(x + 4, y - 126, x + 36, y - 92); for (let k = 3; k >= 0; k--) g.quadraticCurveTo(x - 28 + (k + 0.5) * 16, y - 98, x - 28 + k * 16, y - 92); g.closePath(); path(g, c, INK, 1.6);
+}
+// the street sign by the door: which city, which street
+export function streetSign(g, x, y, st) {
+  const P = placeOf(st.place), name = P.street[st.lang === 'en' ? 'en' : 'zh'];
+  g.fillStyle = 'rgba(40,20,10,0.25)'; ell(g, x, y + 2, 10, 3); g.fill();
+  g.fillStyle = '#4a4a50'; g.fillRect(x - 2, y - 74, 4, 74);
+  g.font = '800 10px Nunito, "Noto Sans TC", sans-serif'; const w = Math.max(56, g.measureText(name).width + 34);
+  const bg = { taipei: '#2a6a4a', bangkok: '#2a4a8a', tokyo: '#f4f0e8', london: '#f4f0e8', paris: '#2a4a7a', nyc: '#2a7a4a' }[P.id] || '#2a6a4a', fg = P.id === 'tokyo' || P.id === 'london' ? '#2a2a2e' : '#fff';
+  rrect(g, x - w / 2, y - 92, w, 18, 3); path(g, bg, INK, 1.4); if (P.id === 'london') { g.fillStyle = '#c8282a'; g.fillRect(x - w / 2 + 3, y - 78, w - 6, 2); }
+  g.fillStyle = fg; g.textAlign = 'center'; g.fillText(name, x + 8, y - 79); flag(g, P.id, x - w / 2 + 4, y - 88, 15, 10);
+}
+// what goes along the road: scooters in Taipei, tuk-tuks in Bangkok, bicycles in Tokyo and Paris, red buses and black cabs in London, yellow taxis in New York
+export function ride(g, s, t) {
+  const { x, y, dir, look: L, kind } = s;
+  if (kind === 'bike') {
+    g.save(); g.translate(x, y); g.scale(dir, 1); g.fillStyle = 'rgba(0,0,0,0.22)'; ell(g, 0, 10, 28, 4); g.fill();
+    g.strokeStyle = INK; g.lineWidth = 2; for (const wx of [-18, 18]) { ell(g, wx, 0, 10, 10); g.stroke(); }
+    g.strokeStyle = L.bag || '#3a6a9a'; g.lineWidth = 3; g.beginPath(); g.moveTo(-18, 0); g.lineTo(-4, -14); g.lineTo(12, -14); g.lineTo(18, 0); g.moveTo(-4, -14); g.lineTo(0, 0); g.lineTo(-18, 0); g.moveTo(12, -14); g.lineTo(14, -22); g.stroke();
+    if (s.basket) { rrect(g, 14, -26, 14, 9, 2); path(g, '#c8a060', INK, 1.2); }
+    g.restore(); person(g, x - dir * 4, y - 22, L, { sit: true, face: dir, t, noShadow: true, scale: 0.8 }); return;
+  }
+  if (kind === 'tuktuk') {
+    person(g, x + dir * 8, y - 26, L, { sit: true, face: dir, t, noShadow: true, scale: 0.72 });
+    g.save(); g.translate(x, y); g.scale(dir, 1); g.fillStyle = 'rgba(0,0,0,0.25)'; ell(g, 0, 10, 40, 5); g.fill();
+    for (const wx of [-26, 28]) { ell(g, wx, 4, 8, 8); path(g, '#2a2a2e', INK, 1.5); }
+    rrect(g, -40, -26, 52, 28, 5); path(g, '#2a7ad0', INK, 2); g.fillStyle = '#f4d040'; g.fillRect(-40, -8, 52, 4);
+    g.beginPath(); g.moveTo(12, 2); g.lineTo(12, -20); g.lineTo(30, -14); g.lineTo(36, 2); g.closePath(); path(g, '#2a7ad0', INK, 2);
+    rrect(g, -44, -54, 74, 8, 3); path(g, '#e8b030', INK, 1.6); g.strokeStyle = INK; g.lineWidth = 2; for (const px of [-40, 26]) { g.beginPath(); g.moveTo(px, -46); g.lineTo(px, -24); g.stroke(); }
+    g.fillStyle = '#ffe890'; ell(g, 35, -8, 3, 3); g.fill(); g.restore(); return;
+  }
+  if (kind === 'bus') {
+    g.save(); g.translate(x, y); g.scale(dir, 1); g.fillStyle = 'rgba(0,0,0,0.25)'; ell(g, 0, 10, 80, 6); g.fill();
+    rrect(g, -78, -78, 156, 82, 8); path(g, '#c8282a', INK, 2);
+    for (const wy of [-70, -34]) for (let k = 0; k < 6; k++) { rrect(g, -70 + k * 24, wy, 19, 20, 3); path(g, 'rgba(200,225,240,0.85)', INK, 1.2); }
+    g.fillStyle = '#f4f0e8'; g.fillRect(-78, -42, 156, 4); rrect(g, 46, -78, 28, 8, 2); path(g, '#2a2a2e', null); g.fillStyle = '#ffd040'; g.font = '800 6px Nunito, sans-serif'; g.textAlign = 'center'; g.fillText('BAKER ST', 60, -72);
+    for (const wx of [-50, 50]) { ell(g, wx, 4, 11, 11); path(g, '#2a2a2e', INK, 1.5); ell(g, wx, 4, 4, 4); path(g, '#9a9aa0', null); }
+    g.fillStyle = '#ffe890'; ell(g, 74, -6, 3, 4); g.fill(); g.restore(); return;
+  }
+  if (kind === 'taxi' || kind === 'cab' || kind === 'car') {
+    const c = kind === 'taxi' ? '#f4c020' : kind === 'cab' ? '#2a2a30' : L.top;
+    g.save(); g.translate(x, y); g.scale(dir, 1); g.fillStyle = 'rgba(0,0,0,0.25)'; ell(g, 0, 10, 46, 5); g.fill();
+    g.beginPath(); g.moveTo(-44, 0); g.lineTo(-44, -16); g.lineTo(-26, -18); g.lineTo(-16, -34); g.lineTo(18, -34); g.lineTo(28, -18); g.lineTo(44, -14); g.lineTo(44, 0); g.closePath(); path(g, c, INK, 2);
+    g.beginPath(); g.moveTo(-22, -19); g.lineTo(-14, -31); g.lineTo(0, -31); g.lineTo(0, -19); g.closePath(); path(g, 'rgba(200,225,240,0.85)', INK, 1.2);
+    g.beginPath(); g.moveTo(4, -19); g.lineTo(4, -31); g.lineTo(16, -31); g.lineTo(24, -19); g.closePath(); path(g, 'rgba(200,225,240,0.85)', INK, 1.2);
+    g.fillStyle = L.skin; ell(g, 12, -25, 4.5, 4.5); g.fill();
+    if (kind === 'taxi') { g.fillStyle = '#2a2a2e'; for (let k = 0; k < 8; k++) g.fillRect(-40 + k * 10, -10, 5, 3); rrect(g, -6, -41, 14, 7, 2); path(g, '#f8f0c0', INK, 1); g.fillStyle = '#2a2a2e'; g.font = '800 5px Nunito, sans-serif'; g.textAlign = 'center'; g.fillText('TAXI', 1, -36); }
+    if (kind === 'cab') { rrect(g, -6, -40, 12, 6, 2); path(g, '#f4b030', INK, 1); }
+    for (const wx of [-26, 28]) { ell(g, wx, 2, 9, 9); path(g, '#2a2a2e', INK, 1.5); ell(g, wx, 2, 3.5, 3.5); path(g, '#b0b0b8', null); }
+    g.fillStyle = '#ffe890'; ell(g, 43, -8, 2.5, 3); g.fill(); g.restore(); return;
+  }
+  scooter(g, x, y, dir, L, t);
+}
+// souvenirs: one from each city, for finishing its challenge
+function souvenir(g, id, x, y, t) {
+  const shadow = (w) => { g.fillStyle = 'rgba(50,30,15,0.22)'; ell(g, x, y + 2, w, 5); g.fill(); };
+  if (id === 'tw101') { shadow(22); rrect(g, x - 18, y - 10, 36, 10, 2); path(g, '#7a4a28', INK, 1.5); for (let k = 0; k < 8; k++) { const by = y - 10 - k * 10, bw = 22 - k * 0.8; g.beginPath(); g.moveTo(x - bw / 2 + 3, by); g.lineTo(x + bw / 2 - 3, by); g.lineTo(x + bw / 2, by - 10); g.lineTo(x - bw / 2, by - 10); g.closePath(); path(g, '#7ab0a0', INK, 1.2); } g.strokeStyle = INK; g.lineWidth = 2; g.beginPath(); g.moveTo(x, y - 90); g.lineTo(x, y - 106); g.stroke(); return; }
+  if (id === 'elephant') { shadow(30); g.fillStyle = '#8a8a94'; for (const lx of [-16, -6, 8, 18]) { rrect(g, x + lx - 4, y - 22, 8, 22, 3); path(g, '#8a8a94', INK, 1.4); } ell(g, x, y - 34, 26, 18); path(g, '#9a9aa4', INK, 2); rrect(g, x - 14, y - 52, 26, 14, 3); path(g, '#c8302a', INK, 1.4); g.fillStyle = '#f0c040'; for (let k = 0; k < 4; k++) g.fillRect(x - 12 + k * 6, y - 42, 3, 3);
+    ell(g, x + 26, y - 42, 12, 12); path(g, '#9a9aa4', INK, 2); ell(g, x + 20, y - 42, 8, 10); path(g, '#8a8a94', INK, 1.4); g.strokeStyle = INK; g.lineWidth = 6; g.beginPath(); g.moveTo(x + 34, y - 38); g.quadraticCurveTo(x + 42, y - 22, x + 36, y - 14); g.stroke(); g.strokeStyle = '#9a9aa4'; g.lineWidth = 3.6; g.stroke(); g.fillStyle = INK; ell(g, x + 30, y - 46, 1.6, 1.6); g.fill(); return; }
+  if (id === 'maneki') { g.fillStyle = '#6a4426'; g.fillRect(x - 30, y + 30, 60, 5); const wave = Math.sin(t * 4) * 0.4; ell(g, x, y + 8, 20, 22); path(g, '#f8f4ec', INK, 2); ell(g, x, y - 18, 18, 16); path(g, '#f8f4ec', INK, 2);
+    for (const sd of [-1, 1]) { g.beginPath(); g.moveTo(x + sd * 16, y - 24); g.lineTo(x + sd * 13, y - 38); g.lineTo(x + sd * 5, y - 30); g.closePath(); path(g, '#f8f4ec', INK, 1.6); } g.fillStyle = '#e86a6a'; ell(g, x - 9, y - 26, 3, 4); g.fill();
+    g.strokeStyle = INK; g.lineWidth = 1.6; for (const sd of [-1, 1]) { g.beginPath(); g.arc(x + sd * 7, y - 18, 3, Math.PI * 1.1, Math.PI * 1.9); g.stroke(); } g.beginPath(); g.arc(x - 2, y - 12, 2.4, 0, Math.PI); g.arc(x + 2, y - 12, 2.4, 0, Math.PI); g.stroke();
+    g.fillStyle = '#d83a2a'; g.fillRect(x - 14, y - 5, 28, 4); ell(g, x, y + 2, 4, 4); path(g, '#f0c040', INK, 1); ell(g, x + 4, y + 14, 9, 7); path(g, '#f0c040', INK, 1.4);
+    g.save(); g.translate(x - 16, y - 4); g.rotate(-0.4 + wave); ell(g, 0, -10, 6, 10); path(g, '#f8f4ec', INK, 1.6); g.restore(); return; }
+  if (id === 'phonebox') { shadow(24); rrect(g, x - 20, y - 98, 40, 98, 3); path(g, '#c8282a', INK, 2); rrect(g, x - 22, y - 104, 44, 8, 3); path(g, '#b82020', INK, 1.6); g.fillStyle = '#2a2a2e'; g.fillRect(x - 15, y - 94, 30, 7); g.fillStyle = '#f4f0e8'; g.font = '800 5px Nunito, sans-serif'; g.textAlign = 'center'; g.fillText('TELEPHONE', x, y - 89);
+    for (let r = 0; r < 5; r++) for (let q = 0; q < 3; q++) { g.fillStyle = 'rgba(200,225,240,0.8)'; g.fillRect(x - 14 + q * 10, y - 82 + r * 13, 8, 11); } g.fillStyle = '#2a2a2e'; ell(g, x + 15, y - 40, 1.5, 3); g.fill(); return; }
+  if (id === 'eiffel') { shadow(22); rrect(g, x - 18, y - 8, 36, 8, 2); path(g, '#7a4a28', INK, 1.5); g.beginPath(); g.moveTo(x - 16, y - 8); g.quadraticCurveTo(x - 4, y - 40, x - 2, y - 90); g.lineTo(x, y - 104); g.lineTo(x + 2, y - 90); g.quadraticCurveTo(x + 4, y - 40, x + 16, y - 8); g.lineTo(x + 8, y - 8); g.quadraticCurveTo(x, y - 24, x - 8, y - 8); g.closePath(); path(g, '#8a7a62', INK, 1.6);
+    g.fillStyle = INK; g.fillRect(x - 9, y - 36, 18, 3); g.fillRect(x - 5, y - 62, 10, 2); return; }
+  if (id === 'neon') { rrect(g, x - 40, y - 26, 80, 52, 6); path(g, '#2a2030', INK, 2); const on = Math.sin(t * 9) > -0.9 ? 1 : 0.4;
+    g.save(); g.globalCompositeOperation = 'lighter'; const gr = g.createRadialGradient(x, y, 4, x, y, 50); gr.addColorStop(0, `rgba(255,90,180,${0.35 * on})`); gr.addColorStop(1, 'rgba(255,90,180,0)'); g.fillStyle = gr; g.fillRect(x - 60, y - 50, 120, 100); g.restore();
+    g.font = '900 22px Nunito, sans-serif'; g.textAlign = 'center'; g.lineWidth = 3; g.strokeStyle = `rgba(255,110,190,${on})`; g.strokeText('TEA', x, y + 4); g.fillStyle = '#fff0f8'; g.fillText('TEA', x, y + 4);
+    g.strokeStyle = `rgba(120,230,255,${on})`; g.lineWidth = 2; rrect(g, x - 34, y - 20, 68, 40, 4); g.stroke(); g.font = '700 8px Nunito, sans-serif'; g.fillStyle = '#a0f0ff'; g.fillText('OPEN 24/7', x, y + 16); return; }
+}
+// the same little flags, on the canvas
+function flag(g, id, x, y, w, h) {
+  g.save(); g.translate(x, y); g.scale(w / 30, h / 20); g.beginPath(); g.rect(0, 0, 30, 20); g.clip();
+  const R = (c, a, b, ww, hh) => { g.fillStyle = c; g.fillRect(a, b, ww, hh); }, O = (c, cx, cy, r) => { g.fillStyle = c; g.beginPath(); g.arc(cx, cy, r, 0, 7); g.fill(); };
+  if (id === 'bangkok') { R('#d8262a', 0, 0, 30, 20); R('#fff', 0, 3.3, 30, 13.4); R('#24306a', 0, 6.7, 30, 6.6); }
+  else if (id === 'tokyo') { R('#fff', 0, 0, 30, 20); O('#c8102e', 15, 10, 6); }
+  else if (id === 'london') { R('#1a2a6a', 0, 0, 30, 20); g.lineCap = 'butt'; for (const [c, lw] of [['#fff', 4], ['#c8102e', 1.4]]) { g.strokeStyle = c; g.lineWidth = lw; g.beginPath(); g.moveTo(0, 0); g.lineTo(30, 20); g.moveTo(30, 0); g.lineTo(0, 20); g.stroke(); } R('#fff', 12, 0, 6, 20); R('#fff', 0, 7, 30, 6); R('#c8102e', 13.3, 0, 3.4, 20); R('#c8102e', 0, 8.3, 30, 3.4); }
+  else if (id === 'paris') { R('#1a3a8a', 0, 0, 10, 20); R('#fff', 10, 0, 10, 20); R('#d8262a', 20, 0, 10, 20); }
+  else if (id === 'nyc') { R('#fff', 0, 0, 30, 20); for (let k = 0; k < 13; k += 2) R('#c8102e', 0, k * 20 / 13, 30, 20 / 13); R('#24306a', 0, 0, 13, 10.8); }
+  else { R('#d8262a', 0, 0, 30, 20); R('#1a3a8a', 0, 0, 15, 10); O('#fff', 7.5, 5, 2.6); }
+  g.restore(); g.strokeStyle = 'rgba(0,0,0,0.4)'; g.lineWidth = 0.8; g.strokeRect(x, y, w, h);
 }
