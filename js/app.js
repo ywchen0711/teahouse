@@ -2,7 +2,8 @@
 import { PRODUCTS, ITEMS, SIZES, TABLES, DECOR, WALLS, FLOORS, UPGRADES, TX, CATS } from './data.js?v=3';
 import { room, counter, street as streetArt, lights, table, chair, seats, person, cup, dish, makeLook, particles, burst, finish, SLOTS, roomH, roomW, canvasH, spotsFor, spotShown, INK } from './art.js?v=3';
 import { make } from './make.js?v=3';
-import { Sim } from './sim.js?v=3';
+import { Sim } from './sim.js?v=5';
+import { EVENTS, shuffled } from './events.js?v=1';
 import { street, goOnline, update as netUpdate, like, send, online, waiting } from './net.js?v=3';
 
 const $ = (id) => document.getElementById(id);
@@ -33,19 +34,19 @@ function makeSpecial(p) {
 }
 const shop = new Sim({
   st: () => S, menu: () => menu(), T: () => t(), lang: () => S.lang, best: (pid) => Math.max(60, S.best[pid] || 60), fx,
-  appeal: () => Math.min(0.85, 0.3 + S.rep * 0.0007 + ambience() * 0.006 + S.up.sign * 0.06), foot: () => 0.45 + S.up.sign * 0.08 + Math.min(0.3, S.rep * 0.0003),
+  appeal: () => Math.min(day && day.rush ? 0.95 : 0.85, 0.3 + S.rep * 0.0007 + ambience() * 0.006 + S.up.sign * 0.06 + (day && day.rush ? 0.2 : 0)), foot: () => (0.45 + S.up.sign * 0.08 + Math.min(0.3, S.rep * 0.0003)) * (day && day.rush ? day.rush.mult : 1),
   staffN: () => 1 + S.up.staff, gear: () => S.up.gear, cat: () => !!S.up.cat, open: () => !!(day && day.open), special: makeSpecial,
   onEnter: () => { if (day) day.guests++; }, onServe: (g, score, byHand) => serve(g, score, byHand),
   onAngry: (g) => { S.rep = Math.max(0, S.rep - 2); pop(g.x, g.y - 90, '💢', '#a83a3a'); },
 });
-function newDay() { S.baskets = (S.baskets || []).filter((b) => b.day >= S.day - 1); day = { t: 0, open: true, guests: 0, sold: 0, sales: 0, costs: 0, tips: 0, rep0: S.rep }; shop.reset(); hud(); }
+function newDay() { S.baskets = (S.baskets || []).filter((b) => b.day >= S.day - 1); day = { t: 0, open: true, guests: 0, sold: 0, sales: 0, costs: 0, tips: 0, rep0: S.rep, evs: planEvents(), evDone: 0, evRep: 0, evMoney: 0, rush: null }; shop.reset(); dropCard(); hud(); }
 function step(dt) {
   if (visit) { visit.sim.update(dt); return; }
   if (!day) return;
   if (day.open) { day.t += dt; if (day.t >= DAY) { day.open = false; day.closing = true; } }
-  shop.update(dt);
+  shop.update(dt); stepEvents();
   // after closing time the last guests finish, then the day is done
-  if (day.closing && !shop.guests.some((g) => !g.gone)) { day.closing = false; setTimeout(summary, 400); }
+  if (day.closing && !shop.guests.some((g) => !g.gone)) { day.closing = false; dropCard(); setTimeout(summary, 400); }
 }
 // a guest gets their order: they pay for it (more for a better one), tip by the shop's ambience, and are happy
 function serve(g, score, byHand) {
@@ -57,7 +58,7 @@ function serve(g, score, byHand) {
   S.stats.sold++; S.stats.earned += price + tip;
   const x = g.seat && !g.takeaway ? g.seat.x : g.x, y = g.seat && !g.takeaway ? g.seat.y : g.y;
   burst(fx, x, y - 60, byHand ? 14 : 7); pop(x, y - 92, `+${price + tip}`);
-  if (g.friend && !g.self) send('served', { to: g.friend, pid: g.pid, score });
+  if (g.vip) vipServed(g, score, byHand); else if (g.friend && !g.self) send('served', { to: g.friend, pid: g.pid, score });
   hud();
 }
 function pop(x, y, text, color) { fx.push({ kind: 'text', text, color, x, y, vx: 0, vy: -30, t: 0, life: 1.4, rot: 0, spin: 0 }); }
@@ -65,7 +66,7 @@ function summary() {
   const T = t(), d = day, profit = d.sales + d.tips - d.costs, newRep = Math.round(S.rep - d.rep0);
   S.stats.guests += d.guests; S.day++; save();
   const unlocks = PRODUCTS.filter((p) => p.unlock > d.rep0 && p.unlock <= S.rep);
-  dialog(`<h3>🌙 ${T.summary} · ${T.day(S.day - 1)}</h3><div class="sum"><span>${T.guests}</span><b>${d.guests}</b><span>${T.sold}</span><b>${d.sold}</b><span>${T.earned}</span><b>${money(d.sales)}</b><span>${T.tips}</span><b>${money(d.tips)}</b><span>${T.costs}</span><b>−${money(d.costs)}</b><span>${T.profit}</span><b class="hot">${money(profit)}</b><span>${T.rep}</span><b>${newRep >= 0 ? '+' : ''}${newRep}</b></div>
+  dialog(`<h3>🌙 ${T.summary} · ${T.day(S.day - 1)}</h3><div class="sum"><span>${T.guests}</span><b>${d.guests}</b><span>${T.sold}</span><b>${d.sold}</b><span>${T.earned}</span><b>${money(d.sales)}</b><span>${T.tips}</span><b>${money(d.tips)}</b><span>${T.costs}</span><b>−${money(d.costs)}</b><span>${T.profit}</span><b class="hot">${money(profit)}</b><span>${T.rep}</span><b>${newRep >= 0 ? '+' : ''}${newRep}</b>${d.evDone ? `<span>📣 ${T.ev.today(d.evDone)}</span><b>⭐${d.evRep >= 0 ? '+' : ''}${d.evRep} · 💰${d.evMoney >= 0 ? '+' : ''}${d.evMoney}</b>` : ''}</div>
     ${unlocks.map((p) => `<p class="new">✨ ${T.unlockedNew(p[S.lang])}</p>`).join('')}<div class="row"><button class="big" id="dNext">☀️ ${T.nextDay}</button></div>`);
   $('dNext').onclick = () => { closeDialog(); newDay(); toast(T.newDay); };
 }
@@ -155,8 +156,8 @@ function canvasClick(e) {
   const sim = visit ? visit.sim : shop, h = sim.hit(x, y);
   if (!h) return;
   if (!visit && h.guest && shop.pendingSpecial(h.guest)) {
-    const g = h.guest; shop.takeSpecial(g);
-    makeDialog(P(g.pid), g.special).then((r) => { if (!r) { shop.releaseSpecial(g); return; } if (shop.handServe(g, r.score)) toast(t().bonus(Math.round(r.score * 0.8))); });
+    const g = h.guest; if (g.secret) toast(t().ev.found(g.name)); shop.takeSpecial(g);
+    makeDialog(P(g.pid), g.special).then((r) => { if (!r) { shop.releaseSpecial(g); return; } if (shop.handServe(g, r.score) && !g.vip) toast(t().bonus(Math.round(r.score * 0.8))); });
     return;
   }
   sim.poke(h);
@@ -235,6 +236,85 @@ function placeAt(i) {
   if (i < 0 || S.decor.some((x) => x.spot === d.spot && x.at === i)) { placing = null; return; }
   if (buy(d.cost)) { S.decor.push({ id: d.id, spot: d.spot, at: i }); burst(fx, spotsFor(d.spot)[i][0], spotsFor(d.spot)[i][1] + 20, 12); save(); hud(); }
   placing = null;
+}
+
+// ------------------------------------------------------------------ the day's events: take them on or let them pass
+const EV_LIFE = 40;   // seconds of shop time a card waits before it goes
+let evNow = null; const vipEv = {};
+const EVBY = new Map(EVENTS.map((e) => [e.id, e]));
+function planEvents() { const n = 3 + (Math.random() < 0.4 ? 1 : 0), out = []; for (let k = 0; k < n; k++) out.push(12 + k * (DAY - 30) / n + Math.random() * 18); return out; }
+function pickEvent() {
+  S.evSeen = S.evSeen || [];
+  const ok = (e) => !S.evSeen.includes(e.id) && ((e.kind !== 'vip' && e.kind !== 'rush') || menu().length > 0) && !(e.kind === 'rush' && day.rush);
+  let pool = EVENTS.filter(ok); if (!pool.length) { S.evSeen = []; pool = EVENTS.filter(ok); }
+  // a fair mix: each kind about as often as it has events
+  const e = pool[Math.floor(Math.random() * pool.length)]; S.evSeen.push(e.id); return e;
+}
+function stepEvents() {
+  if (!day || visit) return;
+  if (day.rush && day.t >= day.rush.until) { const n = day.sold - day.rush.sold0, bonus = Math.round(n * 0.8); S.rep += bonus; day.evRep += bonus; toast(t().rushDone(n, bonus)); day.rush = null; hud(); }
+  if (evNow && day.t > evNow.until) dropCard();
+  if (!evNow && day.open && day.evs.length && day.t >= day.evs[0] && !$('dlg').open) { day.evs.shift(); showCard(pickEvent()); }
+  if (evNow && $('evBar')) $('evBar').style.width = Math.max(0, (evNow.until - day.t) / EV_LIFE * 100) + '%';
+}
+const PN = (pid) => (P(pid) ? P(pid)[S.lang] : pid);
+function cardText(e) {
+  const T = t(), L = S.lang;
+  if (e.kind === 'make') return `${e.line[L]}<br>${T.ev.make(PN(e.pid), e.target, e.special ? e.special.label[L] : '')}`;
+  if (e.kind === 'order') return T.ev.order(e.n, PN(e.pid), e.target);
+  if (e.kind === 'vip') return e.secret ? T.ev.secret(e.who[L]) : T.ev.vip(e.who[L]);
+  if (e.kind === 'rush') return T.ev.rush(e.mult);
+  return e.line[L];
+}
+function showCard(e) {
+  const T = t(), L = S.lang; evNow = { e, until: day.t + EV_LIFE };
+  let el = $('evCard'); if (!el) { el = document.createElement('div'); el.id = 'evCard'; el.className = 'evc'; document.body.appendChild(el); }
+  const buttons = e.kind === 'choice' ? e.opts.map((o, i) => `<button class="btn" data-eo="${i}">${o[L]}</button>`).join('')
+    : e.kind === 'quiz' ? shuffled(e, S.day + e.id.length).map((i) => `<button class="btn" data-eq="${i}">${e.answers[i][L]}</button>`).join('')
+    : `<button class="btn hot" id="evGo">${T.ev.go[e.kind]}</button>`;
+  el.innerHTML = `<div class="evh"><span class="evi">${e.icon}</span><b>${esc(e.who[L])}</b><span class="sp"></span><small>${T.ev.kinds[e.kind]}</small></div><p>${cardText(e)}</p><div class="evb">${buttons}<button class="btn" id="evSkip">${T.ev.skip}</button></div><div class="evt"><i id="evBar"></i></div>`;
+  el.hidden = false; el.classList.remove('in'); void el.offsetWidth; el.classList.add('in');
+  $('evSkip').onclick = dropCard;
+  if ($('evGo')) $('evGo').onclick = () => takeOn(e);
+  el.querySelectorAll('[data-eo]').forEach((b) => b.onclick = () => choose(e, e.opts[+b.dataset.eo]));
+  el.querySelectorAll('[data-eq]').forEach((b) => b.onclick = () => answer(e, +b.dataset.eq));
+}
+function dropCard() { evNow = null; const el = $('evCard'); if (el) el.hidden = true; }
+function reward(rep, money, msg) { rep = Math.round(rep); money = Math.round(money); S.rep += rep; S.money += money; if (day) { day.evDone++; day.evRep += rep; day.evMoney += money; } save(); hud(); burst(fx, 480, 260, 16); toast(msg + (rep || money ? `  ${rep ? `⭐+${rep} ` : ''}${money ? `💰${money > 0 ? '+' : ''}${money}` : ''}` : '')); }
+function takeOn(e) {
+  const T = t(), L = S.lang; dropCard();
+  if (e.kind === 'make' || e.kind === 'order') {
+    const p = P(e.pid), sp = e.special ? { sweet: e.special.sweet, label: e.special.label[L] } : null;
+    makeDialog(p, sp).then((r) => {
+      if (!r) return;
+      if (S.rep >= p.unlock && !sp) { S.best[p.id] = Math.max(S.best[p.id] || 0, r.score); }
+      if (r.score >= e.target) {
+        if (e.kind === 'make') reward(e.rep, e.money, T.ev.won(e.who[L], r.score));
+        else { const pay = e.n * (p.price * (0.6 + r.score / 100 * 0.6) - p.cost); reward(e.n / 5, pay, T.ev.orderDone(e.who[L], e.n, PN(e.pid))); }
+      } else reward(1, 0, T.ev.short(r.score, e.target));
+      closeDialog();
+    });
+  } else if (e.kind === 'vip') {
+    const pid = menu()[Math.floor(Math.random() * menu().length)].id, id = 'vip:' + e.id;
+    vipEv[id] = e; const g = shop.addFriend({ id, name: e.who[L], seed: Math.floor(Math.random() * 1e6), vip: true, secret: e.secret, icon: e.secret ? '' : e.icon });
+    if (g) shop.friendOrder(id, pid);
+    toast(e.secret ? T.ev.secretIn : T.ev.vipIn(e.who[L], PN(pid)));
+  } else if (e.kind === 'rush') { day.rush = { until: day.t + 40, mult: e.mult, sold0: day.sold }; toast(T.ev.rushOn(e.who[L])); }
+}
+function choose(e, o) {
+  const T = t(), L = S.lang; dropCard();
+  if (Math.random() < o.chance) reward(o.rep, o.money, `${e.icon} ${o.rz && L === 'zh' ? o.rz : o.re}`);
+  else reward(Math.max(1, Math.round(o.rep / 2)), Math.min(0, o.money), `${e.icon} ${T.ev.meh}`);
+}
+function answer(e, i) {
+  const T = t(), L = S.lang; dropCard();
+  if (i === e.ok) reward(3, 30, `✅ ${T.ev.right} ${e.why[L]}`); else { toast(`💡 ${T.ev.wrong(e.answers[e.ok][L])} ${e.why[L]}`); if (day) day.evDone++; }
+}
+// a special guest was served: their verdict
+function vipServed(g, score, byHand) {
+  const e = vipEv[g.friend]; if (!e) return; delete vipEv[g.friend];
+  const T = t(), L = S.lang, k = score / 100, rep = byHand ? e.rep * k : e.rep * k * 0.3, money = byHand ? P(g.pid).price * e.mult * k : 0;
+  reward(rep, money, byHand ? T.ev.vipWin(e.who[L], score) : T.ev.vipMissed(e.who[L], score));
 }
 
 // ------------------------------------------------------------------ Tea Street: shops online, chat, rankings, guestbook, friends
@@ -340,7 +420,7 @@ setInterval(() => { for (const g of shop.guests) if (g.friend && !g.self && g.pi
 function dialog(html) { $('dlg').classList.remove('wide'); $('dlgBody').innerHTML = html; if (!$('dlg').open) $('dlg').showModal(); }
 function closeDialog() { if ($('dlg').open) $('dlg').close(); }
 $('dlgX').onclick = closeDialog;
-function toast(msg) { const d = document.createElement('div'); d.className = 'toast'; d.textContent = msg; document.body.appendChild(d); setTimeout(() => d.remove(), 2600); }
+function toast(msg) { const n = document.querySelectorAll('.toast').length, d = document.createElement('div'); d.className = 'toast'; d.style.top = 62 + n * 42 + 'px'; d.textContent = msg; document.body.appendChild(d); setTimeout(() => d.remove(), msg.length > 30 ? 4200 : 2600); }
 function loop(now) {
   requestAnimationFrame(loop);
   const dt = Math.min(0.05, (now - (lastT || now)) / 1000); lastT = now;
@@ -353,4 +433,4 @@ setInterval(() => { if (S.name) save(); }, 30000);
   start();
   try { cloud = await import('/save.js'); if (await cloud.pull(GAME, KEY)) { S = load(); start(); } } catch (e) { cloud = null; }
 })();
-window.TH = { get S() { return S; }, get guests() { return shop.guests; }, get day() { return day; }, get visit() { return visit; }, shop, step, kitchen, newDay, makeDialog, startVisit, streetDialog, street, send };
+window.TH = { get S() { return S; }, get guests() { return shop.guests; }, get day() { return day; }, get visit() { return visit; }, shop, step, kitchen, newDay, makeDialog, startVisit, streetDialog, street, send, get evNow() { return evNow; }, showEvent: (id) => showCard(EVBY.get(id)) };

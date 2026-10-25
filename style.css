@@ -29,7 +29,7 @@ button, input { font: inherit; color: inherit; } button { cursor: pointer; }
 .menuBar { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; padding: 6px 10px; background: var(--paper2); border-top: 3px solid var(--ink); min-height: 40px; }
 .mi { background: var(--paper); border: 1.5px solid var(--ink); border-radius: 10px; padding: 2px 8px; font-weight: 800; font-size: 13px; } .mi small { color: var(--ink2); font-weight: 700; }
 .visitBar { display: flex; gap: 8px; align-items: center; padding: 6px 12px; background: #e8a85a; border-bottom: 3px solid var(--ink); }
-.toast { position: fixed; left: 50%; top: 62px; transform: translateX(-50%); background: var(--paper); border: 2px solid var(--ink); border-radius: 999px; padding: 6px 16px; font-weight: 900; z-index: 99; box-shadow: 0 3px 0 var(--ink); animation: fade 2.6s forwards; pointer-events: none; }
+.toast { position: fixed; left: 50%; top: 62px; transform: translateX(-50%); background: var(--paper); border: 2px solid var(--ink); border-radius: 999px; padding: 6px 16px; font-weight: 900; z-index: 99; box-shadow: 0 3px 0 var(--ink); animation: fade 2.6s forwards; pointer-events: none; max-width: min(560px, 92vw); text-align: center; }
 @keyframes fade { 85% { opacity: 1; } 100% { opacity: 0; } }
 
 /* dialogs */
@@ -81,3 +81,10 @@ dialog h3 { margin: 0 0 8px; font: 700 22px "Noto Serif TC", "Noto Sans TC", ser
 [data-badge]:not([data-badge=""]) { position: relative; } [data-badge]:not([data-badge=""])::after { content: attr(data-badge); position: absolute; top: -7px; right: -7px; background: var(--hot); color: #fff; border-radius: 999px; font-size: 10px; padding: 1px 5px; border: 1.5px solid var(--ink); }
 .menuBar { flex-wrap: nowrap; overflow-x: auto; } .mi { white-space: nowrap; flex: none; }
 .visitBar { flex-wrap: wrap; } .visitBar .btn { padding: 3px 9px; }
+
+/* the event card */
+.evc { position: fixed; left: 12px; bottom: 58px; width: min(380px, calc(100vw - 24px)); background: var(--paper); border: 3px solid var(--ink); border-radius: 16px; padding: 10px 12px 8px; z-index: 50; box-shadow: 0 6px 0 rgba(0,0,0,.3); }
+.evc.in { animation: evin .45s cubic-bezier(.2,1.4,.4,1); } @keyframes evin { from { transform: translateY(40px) scale(.9); opacity: 0; } }
+.evh { display: flex; align-items: center; gap: 6px; } .evi { font-size: 26px; } .evh small { background: #e8a85a; border: 1.5px solid var(--ink); border-radius: 999px; padding: 0 8px; font-weight: 900; }
+.evc p { margin: 6px 0; font-size: 14px; line-height: 1.5; } .evb { display: flex; flex-wrap: wrap; gap: 6px; } .evb .btn { white-space: normal; text-align: left; font-size: 13px; }
+.evt { height: 4px; background: rgba(0,0,0,.12); border-radius: 2px; margin-top: 8px; overflow: hidden; } .evt i { display: block; height: 100%; background: #e8a85a; width: 100%; }

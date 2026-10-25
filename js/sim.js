@@ -154,6 +154,8 @@ export class Sim {
     else if (g.state === 'toSeat' || g.state === 'sit' || g.state === 'wait' || g.state === 'toPickup' || g.state === 'pickup') g.pat += dt;
     if (!g.served && !g.angry && g.pat > this.limit(g)) { this.angry(g, T); }
     if (g.wave > 0) g.wave -= dt; if (g.cheerT > 0) g.cheerT -= dt;
+    // a secret guest gives themselves away: a little notebook now and then
+    if (g.secret && (g.state === 'wait' || g.state === 'drink' || g.state === 'sit')) { g.clueT -= dt; if (g.clueT <= 0) { g.clueT = rnd(5, 9); this.say(g, pickOne(['📓…', '📝', '🤔📓']), 1.6); } }
     switch (g.state) {
       case 'friendIn': if (walk(g, dt, g.sp)) { if (g.seat) { g.state = 'toSeat'; g.path = this.route(g.x, g.y, g.seat.x, g.seat.y + (g.seat.dir === 'b' ? 0 : 6)); } else { g.state = 'toPickup'; g.spot = 1; g.path = this.route(g.x, g.y, PICKUP[1][0], PICKUP[1][1]); } } break;
       case 'enter': if (walk(g, dt, g.sp)) { g.state = 'toQueue'; const q = QUEUE[Math.min(g.qi ?? 0, QUEUE.length - 1)]; g.path = this.route(g.x, g.y, q[0], q[1]); } break;
@@ -173,7 +175,7 @@ export class Sim {
       case 'drink': {
         g.eat += dt; g.chatT = (g.chatT ?? rnd(2, 5)) - dt;
         if (g.chatT <= 0) { g.chatT = rnd(4, 9); if (g.group.length > 1 && Math.random() < 0.7) this.say(g, T.say.chat(), 2.2); }
-        if (g.eat >= g.dur && g.friend) { g.state = 'wait'; g.served = false; g.pid = null; g.special = null; break; }
+        if (g.eat >= g.dur && g.friend && !g.vip) { g.state = 'wait'; g.served = false; g.pid = null; g.special = null; break; }
         if (g.eat >= g.dur) {
           g.finished = true;
           const all = g.group.every((x) => x.finished || x.gone || x.angry || x.takeaway), late = g.eat > g.dur + 18;
@@ -223,10 +225,10 @@ export class Sim {
     return true;
   }
   // ------------------------------------------------------------------ friends visiting over the network
-  addFriend({ id, name, seed, self }) {
+  addFriend({ id, name, seed, self, vip, secret, icon }) {
     if (this.guests.some((g) => g.friend === id && !g.gone)) return;
     const H = this.doorY(), free = this.seatList().filter((s) => { const ss = this.seatState(s); return !ss.by && !ss.dirty; }), seat = free.sort((a, b) => a.y - b.y)[0] || null;
-    const g = { id: Math.random(), friend: id, name, self, look: makeLook(seed || 7), x: -30, y: H + 12, face: 1, phase: 0, sp: 70, path: [[DOOR_X - 20, H + 14], [DOOR_X, H + 4], [DOOR_X, H - 26]], state: 'friendIn', pid: null, seat, takeaway: false, group: null, pat: 0, eat: 0, mood: 'happy' };
+    const g = { id: Math.random(), friend: id, name, self, look: makeLook(seed || 7), x: -30, y: H + 12, face: 1, phase: 0, sp: 70, path: [[DOOR_X - 20, H + 14], [DOOR_X, H + 4], [DOOR_X, H - 26]], state: 'friendIn', pid: null, seat, takeaway: false, group: null, pat: 0, eat: 0, mood: 'happy', vip, secret, icon, clueT: 4 };
     g.group = [g]; if (seat) this.seatState(seat).by = g;
     this.guests.push(g); this.ring = 1.6;
     const c = this.crew.find((x) => x.y <= LANE_Y + 4) || this.crew[0]; if (c) this.say(c, this.o.T().say.welcome(), 2);
@@ -235,9 +237,9 @@ export class Sim {
   friend(id) { return this.guests.find((g) => g.friend === id && !g.gone); }
   friendOrder(id, pid) {
     const g = this.friend(id); if (!g || !P(pid) || (g.pid && !g.served)) return false;
-    g.pid = pid; g.served = false; g.special = { label: this.o.T().friendLabel, friend: true }; g.eat = 0;
+    g.pid = pid; g.served = false; g.special = g.vip ? { vip: true, secret: g.secret, label: g.secret ? '' : g.name, wait: g.secret ? 45 : 30 } : { label: this.o.T().friendLabel, friend: true }; g.eat = 0;
     if (g.state === 'drink') g.state = 'wait';
-    this.orders.push({ g, pid, t: this.t, taken: g.self ? 'remote' : null }); this.say(g, this.o.T().say.order(P(pid)[this.o.lang()], '', P(pid).kind === 'food', false), 2.4);
+    this.orders.push({ g, pid, t: this.t, taken: g.self ? 'remote' : null }); if (!g.vip) this.say(g, this.o.T().say.order(P(pid)[this.o.lang()], '', P(pid).kind === 'food', false), 2.4);
     return true;
   }
   friendServed(id, score) { const g = this.friend(id); if (g && g.pid) { this.orders = this.orders.filter((x) => x.g !== g); this.deliver(g, score, false, this.o.T()); } }
@@ -268,7 +270,7 @@ export class Sim {
       return;
     }
     // 2. an order to make (special orders wait a little for you to make them yourself)
-    const ord = this.orders.filter((x) => !x.taken && (!x.g.special || this.t - x.t > 16)).sort((a, b) => a.t - b.t)[0];
+    const ord = this.orders.filter((x) => !x.taken && (!x.g.special || this.t - x.t > (x.g.special.wait || 16))).sort((a, b) => a.t - b.t)[0];
     if (ord) {
       ord.taken = c; const p = P(ord.pid), food = p.kind === 'food', mk = (food ? 6 : 4.5) / (1 + o.gear() * 0.3);
       const station = food ? 74 : 120 + (c.k % 2) * 30;
@@ -366,17 +368,19 @@ export class Sim {
     // order bubbles over the ones waiting for theirs; making rings over busy staff; speech
     for (const gu of this.guests) {
       if (gu.served || gu.angry || !gu.pid || !(gu.state === 'wait' || gu.state === 'pickup' || gu.state === 'sit')) continue;
-      const seated = gu.state !== 'pickup', x = (seated ? gu.seat.x : gu.x) + 20, y = (seated ? gu.seat.y : gu.y) - 78 + Math.sin(time * 3 + gu.id * 9) * 2, p = P(gu.pid), sp = gu.special, w = sp ? 96 : gu.takeaway ? 72 : 44;
-      g.fillStyle = sp ? '#fff4c8' : '#fffaf0'; g.strokeStyle = '#4a3426'; g.lineWidth = 2; g.beginPath(); g.roundRect(x - 6, y - 36, w, 40, 10); g.fill(); g.stroke(); g.beginPath(); g.moveTo(x, y + 4); g.lineTo(x - 8, y + 12); g.lineTo(x + 8, y + 4); g.fill();
+      const seated = gu.state !== 'pickup', x = (seated ? gu.seat.x : gu.x) + 20, y = (seated ? gu.seat.y : gu.y) - 78 + Math.sin(time * 3 + gu.id * 9) * 2, p = P(gu.pid), sp = gu.special, w = sp && !sp.secret ? 96 : gu.takeaway ? 72 : 44;
+      g.fillStyle = sp && !sp.secret ? '#fff4c8' : '#fffaf0'; g.strokeStyle = '#4a3426'; g.lineWidth = 2; g.beginPath(); g.roundRect(x - 6, y - 36, w, 40, 10); g.fill(); g.stroke(); g.beginPath(); g.moveTo(x, y + 4); g.lineTo(x - 8, y + 12); g.lineTo(x + 8, y + 4); g.fill();
       if (p.kind === 'food') dish(g, x + 16, y - 6, p.dish, 0.55, 0, p); else cup(g, x + 16, y - 2, p, 0.6);
       g.fillStyle = '#a8601a'; g.font = '800 11px Nunito, "Noto Sans TC", sans-serif'; g.textAlign = 'left';
-      if (sp && sp.friend) { g.fillText('💛 ' + (gu.name || '').slice(0, 6), x + 32, y - 20); g.fillText(sp.label.slice(0, 7), x + 32, y - 6); }
+      if (sp && sp.secret) { /* looks like anyone else */ }
+      else if (sp && sp.vip) { g.fillText('🌟 ' + (gu.name || '').slice(0, 6), x + 32, y - 20); g.fillText(T.vipLabel, x + 32, y - 6); }
+      else if (sp && sp.friend) { g.fillText('💛 ' + (gu.name || '').slice(0, 6), x + 32, y - 20); g.fillText(sp.label.slice(0, 7), x + 32, y - 6); }
       else if (sp) { g.fillText('⭐ ' + sp.label.slice(0, 7), x + 32, y - 20); g.fillText(T.special('').replace(/[:：]\s*$/, '').slice(0, 6), x + 32, y - 6); }
       else if (gu.takeaway) g.fillText(T.takeaway, x + 32, y - 12);
       const k = 1 - gu.pat / this.limit(gu); g.fillStyle = k > 0.5 ? '#7ab04a' : k > 0.25 ? '#e8b040' : '#d84a3a'; g.fillRect(x - 2, y + 6, (w - 8) * Math.max(0, k), 4);
     }
     for (const c of this.crew) { const s = c.plan[0]; if (!s || !s.make || !s.begun || c.path.length) continue; const k = 1 - s.left / s.total; g.fillStyle = 'rgba(255,255,255,0.85)'; g.beginPath(); g.arc(c.x, c.y - 96, 12, 0, 7); g.fill(); g.strokeStyle = '#c8503e'; g.lineWidth = 3; g.beginPath(); g.arc(c.x, c.y - 96, 9, -1.57, -1.57 + 6.28 * k); g.stroke(); }
-    for (const gu of this.guests) if (gu.friend && !gu.gone) { const seated = gu.seat && (gu.state === 'sit' || gu.state === 'wait' || gu.state === 'drink'); nameTag(g, seated ? gu.seat.x : gu.x, seated ? gu.seat.y - 66 : gu.y + 34, gu.name, gu.self); }
+    for (const gu of this.guests) if (gu.friend && !gu.gone && !gu.secret) { const seated = gu.seat && (gu.state === 'sit' || gu.state === 'wait' || gu.state === 'drink'); nameTag(g, seated ? gu.seat.x : gu.x, seated ? gu.seat.y - 66 : gu.y + 34, (gu.icon ? gu.icon + ' ' : '') + gu.name, gu.self); }
     for (const s of this.says) {
       const e = s.e, seated = e.seat && (e.state === 'sit' || e.state === 'wait' || e.state === 'drink'), x = seated ? e.seat.x : e.x, y = (seated ? e.seat.y : e.y) - (e === this.catE ? 34 : seated ? 72 : 80);
       say(g, x, y, s.text, Math.min(1, (s.life - s.t) * 3, s.t * 8), s.warm);
