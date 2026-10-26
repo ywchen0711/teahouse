@@ -24,8 +24,8 @@ button, input { font: inherit; color: inherit; } button { cursor: pointer; }
 .shopName { font: 700 18px "Noto Serif TC", serif; margin-right: 4px; }
 .pill { background: rgba(0, 0, 0, .25); border-radius: 999px; padding: 2px 10px; font-weight: 800; font-size: 14px; }
 .stage { flex: 1; min-height: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 6px; overflow: auto; }
-#cv { max-width: 100%; max-height: calc(100% - 12px); width: auto; height: auto; border: 3px solid var(--ink); border-radius: 16px; background: #3a2a1e; box-shadow: 0 6px 18px rgba(0, 0, 0, .4); cursor: pointer; }
-.dayBar { width: min(960px, 100%); height: 6px; background: rgba(255, 255, 255, .15); border-radius: 3px; margin-top: 6px; } .dayBar i { display: block; height: 100%; width: 0; background: #e8b040; border-radius: 3px; }
+#cv { max-width: none; max-height: none; width: auto; height: auto; flex: none; border: 3px solid var(--ink); border-radius: 16px; background: #3a2a1e; box-shadow: 0 6px 18px rgba(0, 0, 0, .4); cursor: pointer; }
+.dayBar { width: min(960px, 100%); flex: none; height: 6px; background: rgba(255, 255, 255, .15); border-radius: 3px; margin-top: 6px; } .dayBar i { display: block; height: 100%; width: 0; background: #e8b040; border-radius: 3px; }
 .menuBar { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; padding: 6px 10px; background: var(--paper2); border-top: 3px solid var(--ink); min-height: 40px; }
 .mi { background: var(--paper); border: 1.5px solid var(--ink); border-radius: 10px; padding: 2px 8px; font-weight: 800; font-size: 13px; } .mi small { color: var(--ink2); font-weight: 700; }
 .visitBar { display: flex; gap: 8px; align-items: center; padding: 6px 12px; background: #e8a85a; border-bottom: 3px solid var(--ink); }
@@ -101,3 +101,28 @@ dialog h3 { margin: 0 0 8px; font: 700 22px "Noto Serif TC", "Noto Sans TC", ser
 .tag { background: var(--paper2); border-radius: 999px; padding: 2px 10px; font-weight: 800; font-size: 13px; }
 svg.flag { vertical-align: -3px; border-radius: 2px; box-shadow: 0 0 0 1px rgba(0, 0, 0, .25); flex: none; }
 .ph svg.flag { width: 33px; height: 22px; }
+
+/* tablets and phones: everything you read or tap is bigger */
+@media (pointer: coarse) {
+  html, body { font-size: 17px; }
+  .top { gap: 8px; padding: 8px 12px; } .top .btn { font-size: 16px; padding: 7px 12px; border-radius: 12px; } .pill, .pill.city { font-size: 16px; padding: 4px 12px; } .shopName { font-size: 18px; }
+  .menuBar { min-height: 52px; padding: 8px 12px; gap: 8px; } .mi { font-size: 16px; padding: 5px 11px; border-radius: 12px; }
+  .btn { font-size: 16px; padding: 8px 14px; } .big { font-size: 19px; padding: 12px 28px; } .chip { font-size: 15px; padding: 5px 13px; }
+  dialog { width: min(760px, calc(100vw - 20px)); padding: 20px 22px; font-size: 17px; } dialog h3 { font-size: 25px; } dialog .x { font-size: 34px; right: 12px; }
+  dialog.wide { width: min(1240px, calc(100vw - 12px)); }
+  .pc b { font-size: 16px; } .pc small, .pc em { font-size: 14px; }
+  .mkCard { font-size: 16px; } .mkCard .about { font-size: 14.5px; } .mkCard .steps li { padding-top: 4px; padding-bottom: 4px; } .mkCard .steps li small { font-size: 13px; }
+  .mkCard .steps li::before { width: 20px; height: 20px; font-size: 12px; top: 5px; } .tiny { font-size: 13px; }
+  .shelf h5 { font-size: 15px; } .tool { font-size: 16px; padding: 8px 12px; border-radius: 12px; gap: 7px; } .tool.big { font-size: 19px; padding: 14px 22px; }
+  .evc { font-size: 16px; } .evc p { font-size: 16.5px; } .evb .btn { font-size: 16px; padding: 9px 14px; } .evi { font-size: 32px; }
+  .toast { font-size: 17px; padding: 9px 20px; } .tag, .owned span, .place p, .place .meta { font-size: 15px; }
+  .kbar input, dialog textarea { font-size: 17px; padding: 9px 12px; }
+  /* making a drink: use the whole height, keep shake / start over / serve always in reach */
+  dialog.wide { max-height: calc(100dvh - 8px); padding: 8px; }
+  .mk { grid-template-columns: minmax(250px, 0.8fr) minmax(280px, 1fr) minmax(380px, 1.35fr); }
+  .mkTools, .mkCard { max-height: calc(100dvh - 40px); }
+  .mkTools .shelf:first-child .tool { font-size: 15px; padding: 6px 10px; }
+  .shelf.row2 { position: sticky; bottom: 0; z-index: 3; background: var(--paper); padding-top: 6px; box-shadow: 0 -6px 10px var(--paper); }
+  .top { row-gap: 6px; } .pill { padding: 3px 11px; }
+}
+@media (pointer: coarse) and (max-width: 860px) { .mk { grid-template-columns: 1fr 1fr; } .mkTools { max-height: none; overflow: visible; } dialog.wide { overflow-y: auto; } .mkMid { padding-top: 34px; } }

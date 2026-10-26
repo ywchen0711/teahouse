@@ -126,12 +126,22 @@ function summary() {
 }
 
 // ------------------------------------------------------------------ drawing the shop (mine, or the one I'm visiting)
+// the shop is drawn at the screen's own pixel density and scaled to fill the space it has (a small shop shows only
+// its own room, so it draws bigger); VW × VH is the part of the 960-wide scene on show
+let VW = 960, VH = 600;
+function fitCanvas() {
+  const cv = $('cv'), stage = document.querySelector('.stage'); if (!cv || !stage) return;
+  const bar = 14, w = stage.clientWidth - 12, h = stage.clientHeight - 12 - bar, k = Math.max(0.2, Math.min(w / VW, h / VH));
+  cv.style.width = Math.floor(VW * k) + 'px'; cv.style.height = Math.floor(VH * k) + 'px'; const db = document.querySelector('.dayBar'); if (db) db.style.width = Math.floor(VW * k) + 'px';
+}
+addEventListener('resize', fitCanvas); addEventListener('orientationchange', () => setTimeout(fitCanvas, 300));
 function draw(now) {
   const cv = $('cv'); if (!cv) return;
-  const st = visit ? visit.st : S, sim = visit ? visit.sim : shop, H = canvasH(st.size), g = cv.getContext('2d'), time = now / 1000;
-  if (cv.height !== H) cv.height = H;
+  const st = visit ? visit.st : S, sim = visit ? visit.sim : shop, H = canvasH(st.size), W = Math.min(960, roomW(st.size) + 56), g = cv.getContext('2d'), time = now / 1000, dpr = Math.min(2, devicePixelRatio || 1);
+  if (cv.width !== Math.round(W * dpr) || cv.height !== Math.round(H * dpr) || VW !== W || VH !== H) { VW = W; VH = H; cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr); fitCanvas(); }
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
   const view = { ...st, lang: S.lang, menu: visit ? st.menu : menu().map((p) => p.id), weather: visit ? 'clear' : day && day.weather };
-  g.clearRect(0, 0, 960, H);
+  g.clearRect(0, 0, W, H);
   room(g, view, time); streetArt(g, view, time);
   sim.drawBehind(g, time);
   counter(g, 20, 186, time, view);
@@ -140,7 +150,7 @@ function draw(now) {
   sim.drawOver(g, time);
   if (placing) for (const [i, [x, y]] of spotsFor(placing.spot).entries()) { if (!spotShown(st, placing.spot, i)) continue; const busy = S.decor.some((d) => d.spot === placing.spot && d.at === i); g.strokeStyle = busy ? '#a83a3a' : '#3a8a4a'; g.lineWidth = 3; g.setLineDash([6, 4]); g.strokeRect(x - 34, y - (placing.spot === 'ceil' ? -4 : 70), 68, 72); g.setLineDash([]); }
   particles(g, fx, Math.min(0.05, (now - (draw.last || now)) / 1000)); draw.last = now;
-  finish(g, 960, H);
+  finish(g, W, H);
 }
 
 // ------------------------------------------------------------------ visiting someone else's teahouse (guests are only for show)
@@ -182,6 +192,7 @@ function start() {
   $('hCity').onclick = placesDialog;
   $('hLang').onclick = () => { S.lang = S.lang === 'zh' ? 'en' : 'zh'; save(); start(); };
   $('cv').onclick = canvasClick;
+  setTimeout(fitCanvas, 0);
   if (!day) { const td = S.today; if (td && td.dayNo === S.day && td.place === S.place && (td.open || td.closing)) { day = { ...td }; delete day.dayNo; shop.reset(); dropCard(); setTimeout(() => toast(t().resumed), 600); } else newDay(); } hud();
   goOnline(snapshot());
   // the very first time: learn the first drink before opening
@@ -207,7 +218,7 @@ function hud() {
   $('menuBar').innerHTML = `<b>${T.menu} <small>${menu().length}/${PRODUCTS.length}</small></b>` + menu().map((p) => `<span class="mi ${here().favs(p) ? 'fav' : ''}">${p.kind === 'food' ? '🍜' : '🧋'} ${p[S.lang]} <small>${money(p.price * (M().price || 1))} · ${S.best[p.id]}</small></span>`).join('');
 }
 function canvasClick(e) {
-  const cv = $('cv'), r = cv.getBoundingClientRect(), x = (e.clientX - r.left) * 960 / r.width, y = (e.clientY - r.top) * cv.height / r.height;
+  const cv = $('cv'), r = cv.getBoundingClientRect(), x = (e.clientX - r.left) * VW / r.width, y = (e.clientY - r.top) * VH / r.height;
   // placing a decoration: the same boxes as drawn
   if (placing) { const sp = spotsFor(placing.spot); const i = sp.findIndex(([px, py]) => { const top = placing.spot === 'ceil' ? py + 4 : py - 70; return x > px - 34 && x < px + 34 && y > top && y < top + 72; }); placeAt(i); return; }
   const sim = visit ? visit.sim : shop, h = sim.hit(x, y);
