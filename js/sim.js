@@ -3,9 +3,9 @@
 // take the orders at the register, make each one at the counter, carry it over, and clear the table afterwards.
 // Friends chat, raise a toast, take a photo of their drinks; on the way out they wave and the staff thank them.
 // Everyone walks with a stride that matches the ground they cover, along A* paths over a grid of the floor.
-import { SLOTS, seats, roomH, roomW, STREET, DOOR_X, FLOOR_SPOTS, spotShown, makeLook, staffLook, person, table, chair, cup, dish, teapot, decor, cat, scooter, ride, brolly, streetSign, say, frontWall, streetProps, aboard, basket, nameTag, burst } from './art.js?v=4';
+import { SLOTS, seats, roomH, roomW, STREET, DOOR_X, FLOOR_SPOTS, spotShown, makeLook, staffLook, person, table, chair, cup, dish, teapot, decor, cat, scooter, ride, brolly, streetSign, say, frontWall, streetProps, aboard, basket, nameTag, burst } from './art.js?v=5';
 import { placeOf } from './places.js?v=1';
-import { PRODUCTS } from './data.js?v=4';
+import { PRODUCTS } from './data.js?v=5';
 
 const CELL = 20, LANE_Y = 198, EXIT = [300, 216], LANE_END = 276, REG_X = 236;
 const QUEUE = [[244, 306], [244, 350], [244, 394]], PICKUP = [[92, 306], [150, 316]];   // pickup: in front of the counter's left end
@@ -142,7 +142,7 @@ export class Sim {
     const H = this.doorY(), T = o.T();
     group.forEach((w, j) => {
       w.inside = true;
-      const p = takeaway ? pickW(drinks, o.weight) : pickW(m, o.weight), seat = seatsFor ? seatsFor[j] : null;
+      const wt = (p) => (o.weight ? o.weight(p) : 1) * (w.look.kid ? (p.cat === 'kids' ? 10 : 0.3) : p.cat === 'kids' ? 0.15 : 1), p = takeaway ? pickW(drinks, wt) : pickW(m, wt), seat = seatsFor ? seatsFor[j] : null;
       const g = { id: Math.random(), look: w.look, x: w.x, y: w.y, face: w.dir, phase: w.phase, sp: w.sp, path: [[DOOR_X + (w.x - DOOR_X) * 0.2, H + 30], [DOOR_X, H + 4], [DOOR_X, H - 26]], state: 'enter', pid: p.id, takeaway, seat, group: null, pat: 0, eat: 0, mood: 'wait' };
       if (seat) this.seatState(seat).by = g;
       w.guest = g; this.guests.push(g); this.queue.push(g); o.onEnter(g);

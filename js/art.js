@@ -3,7 +3,7 @@
 // warm vignette over everything, lantern light, hearts and confetti when someone is happy. The shop opens onto a
 // little street at the bottom: a red-brick pavement and an alley road where people and scooters go by.
 // All drawn on a canvas, nothing loaded.
-import { WALLS, FLOORS, PRODUCTS } from './data.js?v=4';
+import { WALLS, FLOORS, PRODUCTS } from './data.js?v=5';
 import { placeOf } from './places.js?v=1';
 
 export const INK = '#4a3426';

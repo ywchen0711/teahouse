@@ -149,6 +149,19 @@ export const MORE = {
   gingersyrup: { zh: '熱薑汁糖水', en: 'Hot ginger syrup', color: '#c8903a', shelf: 'pour', for: 'food', rate: 60 },
   condensed: { zh: '煉乳', en: 'Condensed milk', color: '#f8f0d8', shelf: 'pour', for: 'food', rate: 25 },
   mangosauce: { zh: '芒果醬', en: 'Mango sauce', color: '#f0a020', shelf: 'pour', for: 'food', rate: 30 },
+  // for the kids' menu
+  banana: { zh: '香蕉泥', en: 'Mashed banana', color: '#f4e08a', shelf: 'jar', for: 'drink', unit: u('匙', 'scoop'), vol: 40 },
+  apple: { zh: '現榨蘋果汁', en: 'Fresh apple juice', color: '#f0d070', shelf: 'pour', for: 'drink', rate: 100 },
+  batter: { zh: '鬆餅麵糊', en: 'Pancake batter', color: '#f0dca0', shelf: 'pour', for: 'food', rate: 50 },
+  maple: { zh: '楓糖漿', en: 'Maple syrup', color: '#b8702a', shelf: 'pour', for: 'food', rate: 20 },
+  cornsoup: { zh: '玉米濃湯', en: 'Cream of corn soup', color: '#f4dc80', shelf: 'pour', for: 'food', rate: 100 },
+  chocsauce: { zh: '巧克力醬', en: 'Chocolate sauce', color: '#4a2414', shelf: 'pour', for: 'food', rate: 20 },
+  butter: { zh: '奶油', en: 'Butter', color: '#f8e8a0', shelf: 'jar', for: 'food', unit: u('塊', 'knob') },
+  nugget: { zh: '雞塊', en: 'Chicken nuggets', color: '#d8a050', shelf: 'jar', for: 'food', unit: u('塊', 'nuggets') },
+  fries: { zh: '薯條', en: 'Fries', color: '#f0d060', shelf: 'jar', for: 'food', unit: u('份', 'portion') },
+  ketchup: { zh: '番茄醬', en: 'Ketchup', color: '#c8281a', shelf: 'jar', for: 'food', unit: u('匙', 'spoon') },
+  toast: { zh: '吐司', en: 'Sliced bread', color: '#f0d8a0', shelf: 'jar', for: 'food', unit: u('片', 'slices') },
+  icecream: { zh: '香草冰淇淋', en: 'Vanilla ice cream', color: '#fbf4e0', shelf: 'jar', for: 'food', unit: u('球', 'scoops') },
   // hand steps for food
   flip: { zh: '翻面', en: 'Flip it', color: '#8a8a90', shelf: 'do', for: 'food', why: u('沒翻面，一面焦一面生', 'unflipped: burnt on one side, raw on the other') },
   skin: { zh: '蓋上餅皮', en: 'Lay the crepe on', color: '#f0e0b0', shelf: 'do', for: 'food', why: u('沒有餅皮就不是蛋餅了', 'without the crepe it isn’t a dan bing') },
@@ -375,16 +388,56 @@ export function generate(ITEMS, taken) {
       steps: hot ? [{ kind: 'heat', item: 'water', target: 90, tol: 6, note: P('隔水加熱，讓仙草化開', 'warm it over hot water until it melts') }, { kind: 'scoop', item: 'grass', n: 3 }, { kind: 'do', item: 'stir' }, { kind: 'scoop', item: 'peanutsoft', n: 1 }, { kind: 'scoop', item: 'taroball', n: 1, w: 1 }, { kind: 'pour', item: 'brownsyrup', ml: 30, tol: 8, w: 1 }, { kind: 'serve' }]
         : [{ kind: 'do', item: 'shave' }, ...tops.map(([t, n], i) => ({ kind: 'scoop', item: t, n, w: i ? 1 : 0 })), ...pours.map(([t, ml]) => ({ kind: 'pour', item: t, ml, tol: Math.max(8, ml * 0.25) })), { kind: 'serve' }] });
   }
+  // ---------- the kids' menu: no tea and no caffeine, gentle sweetness, small portions
+  const kd = (id, zh, en, short, price, layers, about, steps, extra = {}) => add({ id: 'kids_' + id, cat: 'kids', zh, en, short, price, cost: Math.round(price * 0.3), kind: 'drink', layers, about, steps, cx: 1, kid: 1, ...extra });
+  kd('strawberry', '草莓牛奶', 'Strawberry milk', '草莓奶', 45, ['#f4b8c4'], P('草莓果醬加鮮奶、少少冰塊搖勻，粉紅色的、小朋友最愛。', 'Strawberry jam with fresh milk and a little ice, shaken: pink and a favourite.'),
+    [{ kind: 'scoop', item: 'strawberry', n: 2 }, { kind: 'pour', item: 'milk', ml: 300, tol: 30, w: 1 }, { kind: 'scoop', item: 'ice', n: 1, w: 1 }, { kind: 'shake', n: 8 }, { kind: 'serve' }]);
+  kd('cocoa', '熱可可牛奶', 'Hot cocoa milk', '可可奶', 45, ['#8a5a3a'], P('可可粉先用一點熱水攪開（不然會結塊），再倒熱鮮奶。熱的，不加冰、不搖。', 'Cocoa powder first stirred smooth in a little hot water (or it lumps), then hot milk. Served warm: no ice, no shaking.'),
+    [{ kind: 'scoop', item: 'cocoa', n: 3 }, { kind: 'pour', item: 'hot', ml: 50, tol: 15 }, { kind: 'do', item: 'stir' }, { kind: 'pour', item: 'milk', ml: 250, tol: 30 }, { kind: 'shake', n: 0 }, { kind: 'serve' }]);
+  kd('banana', '香蕉牛奶', 'Banana milk', '香蕉奶', 45, ['#f4e4a0'], P('香蕉壓成泥，加鮮奶和一點蜂蜜搖勻。香蕉本身就甜，不加糖。', 'Mashed banana with fresh milk and a little honey, shaken. The banana is sweet enough: no syrup.'),
+    [{ kind: 'scoop', item: 'banana', n: 2 }, { kind: 'scoop', item: 'honey', n: 1, w: 1 }, { kind: 'pour', item: 'milk', ml: 300, tol: 30, w: 1 }, { kind: 'scoop', item: 'ice', n: 1, w: 1 }, { kind: 'shake', n: 10 }, { kind: 'serve' }]);
+  kd('yakultorange', '養樂多柳橙', 'Yakult orange', '多多橙', 45, ['#f8c060'], P('現榨柳橙汁加養樂多、冰塊搖勻，酸酸甜甜。', 'Fresh orange juice with Yakult and ice, shaken: sweet and tangy.'),
+    [{ kind: 'pour', item: 'orange', ml: 200, tol: 25 }, { kind: 'pour', item: 'yakult', ml: 100, tol: 18, w: 1 }, { kind: 'scoop', item: 'ice', n: 2, w: 1 }, { kind: 'shake', n: 8 }, { kind: 'serve' }]);
+  kd('honeylemon', '蜂蜜檸檬水', 'Honey lemonade', '蜂蜜檸', 40, ['#f4e08a'], P('現擠檸檬加龍眼蜂蜜、冷開水和冰塊搖勻，不加茶。', 'Fresh lemon with longan honey, cold water and ice, shaken: no tea at all.'),
+    [{ kind: 'scoop', item: 'honey', n: 2 }, { kind: 'scoop', item: 'lemon', n: 1, w: 1 }, { kind: 'pour', item: 'cold', ml: 350, tol: 35, w: 1 }, { kind: 'scoop', item: 'ice', n: 2, w: 1 }, { kind: 'shake', n: 10 }, { kind: 'serve' }], { lemon: true });
+  kd('apple', '蘋果汁', 'Apple juice', '蘋果汁', 40, ['#f0d070'], P('現榨蘋果汁加兩杓冰塊，輕輕攪一下就好，不用搖。', 'Fresh-pressed apple juice over two scoops of ice, a gentle stir: no need to shake.'),
+    [{ kind: 'scoop', item: 'ice', n: 2 }, { kind: 'pour', item: 'apple', ml: 300, tol: 30 }, { kind: 'do', item: 'stir' }, { kind: 'shake', n: 0 }, { kind: 'serve' }]);
+  kd('puddingmilk', '布丁鮮奶', 'Pudding milk', '布丁奶', 55, ['#f8f0dc', '#f0c860'], P('一整顆雞蛋布丁放進杯底，加冰塊、倒鮮奶。千萬別搖，布丁要完整的。', 'A whole egg pudding in the bottom of the cup, ice, fresh milk on top. Never shake: the pudding should stay whole.'),
+    [{ kind: 'scoop', item: 'pudding', n: 1 }, { kind: 'scoop', item: 'ice', n: 2 }, { kind: 'pour', item: 'milk', ml: 300, tol: 30, w: 1 }, { kind: 'shake', n: 0 }, { kind: 'serve' }]);
+  kd('mangomilk', '芒果牛奶', 'Mango milk', '芒果奶', 55, ['#f8c860'], P('芒果果泥加鮮奶、冰塊搖勻，香濃的芒果冰沙口感。', 'Mango purée with fresh milk and ice, shaken into a rich mango shake.'),
+    [{ kind: 'scoop', item: 'mango', n: 2 }, { kind: 'pour', item: 'milk', ml: 300, tol: 30, w: 1 }, { kind: 'scoop', item: 'ice', n: 2, w: 1 }, { kind: 'shake', n: 12 }, { kind: 'serve' }]);
+  const kf = (p) => food({ cat: 'kids', cx: 1, kid: 1, ...p, id: 'kids_' + p.id });
+  kf({ id: 'pancake', zh: '小熊鬆餅', en: 'Teddy bear pancakes', short: '小熊餅', price: 60, dish: 'plate', dc: '#e8b060', dt: '#f8f0d8',
+    about: P('鐵板上倒鬆餅麵糊，煎到表面冒泡就翻面，再煎 1 分鐘。疊兩片、放一塊奶油、淋楓糖漿。', 'Pancake batter on the griddle; when bubbles rise, flip it and give it another minute. Stack two, a knob of butter, maple syrup.'),
+    steps: [{ kind: 'pick', item: 'griddle' }, { kind: 'pour', item: 'batter', ml: 120, tol: 25 }, { kind: 'do', item: 'flip' }, { kind: 'steep', item: 'griddle', min: 1, tol: 0.4 }, { kind: 'scoop', item: 'butter', n: 1 }, { kind: 'pour', item: 'maple', ml: 20, tol: 8, w: 1 }, { kind: 'serve' }] });
+  kf({ id: 'nuggets', zh: '雞塊薯條', en: 'Chicken nuggets and fries', short: '雞塊', price: 75, dish: 'plate', dc: '#e0a040', dt: '#f0d060',
+    about: P('雞塊和薯條一起下 170°C 的油鍋炸 4 分鐘，撈起瀝油，配番茄醬。', 'Nuggets and fries into the 170°C fryer together for 4 minutes, lift out and drain, with ketchup.'),
+    steps: [{ kind: 'pick', item: 'fryer' }, { kind: 'scoop', item: 'nugget', n: 5 }, { kind: 'scoop', item: 'fries', n: 1, w: 1 }, { kind: 'steep', item: 'fryer', min: 4, tol: 0.8 }, { kind: 'do', item: 'drain' }, { kind: 'scoop', item: 'ketchup', n: 1 }, { kind: 'serve' }] });
+  kf({ id: 'omurice', zh: '蛋包飯', en: 'Omelette rice', short: '蛋包飯', price: 80, dish: 'plate', dc: '#f4d050', dt: '#c83a2a',
+    about: P('白飯和玉米粒、火腿丁拌番茄醬，鐵板上的蛋液煎 1 分鐘，把飯包起來，最後畫上番茄醬。', 'Rice tossed with sweetcorn, ham and ketchup; eggs on the griddle for a minute, wrapped round the rice, ketchup drawn on top.'),
+    steps: [{ kind: 'pick', item: 'griddle' }, { kind: 'scoop', item: 'rawegg', n: 2 }, { kind: 'steep', item: 'griddle', min: 1, tol: 0.4 }, { kind: 'scoop', item: 'rice', n: 1 }, { kind: 'scoop', item: 'corn', n: 1, w: 1 }, { kind: 'scoop', item: 'ham', n: 1, w: 1 }, { kind: 'do', item: 'roll' }, { kind: 'scoop', item: 'ketchup', n: 1 }, { kind: 'serve' }] });
+  kf({ id: 'cornsoup', zh: '玉米濃湯', en: 'Cream of corn soup', short: '玉米湯', price: 45, dish: 'soup', dc: '#f4dc80', dt: '#f0d040',
+    about: P('玉米濃湯加熱到 85°C 左右（滾了會黏鍋），舀進碗裡，撒玉米粒。', 'Corn soup warmed to about 85°C (a boil makes it catch), ladled into the bowl, sweetcorn on top.'),
+    steps: [{ kind: 'heat', item: 'water', target: 85, tol: 6, note: P('濃湯小火慢慢熱，不要滾', 'warm it gently: never boil a cream soup') }, { kind: 'pour', item: 'cornsoup', ml: 250, tol: 30 }, { kind: 'scoop', item: 'corn', n: 1 }, { kind: 'serve' }] });
+  kf({ id: 'cheesetoast', zh: '起司吐司', en: 'Cheese toast', short: '起司吐', price: 40, dish: 'plate', dc: '#e8c070', dt: '#f0c040',
+    about: P('吐司鋪上起司片，放上鐵板煎 2 分鐘到起司融化，對角切開。', 'Toast with a slice of cheese, 2 minutes on the griddle until it melts, cut corner to corner.'),
+    steps: [{ kind: 'pick', item: 'griddle' }, { kind: 'scoop', item: 'toast', n: 2 }, { kind: 'scoop', item: 'cheese', n: 1, w: 1 }, { kind: 'steep', item: 'griddle', min: 2, tol: 0.6 }, { kind: 'do', item: 'cut' }, { kind: 'serve' }] });
+  kf({ id: 'sundae', zh: '草莓聖代', en: 'Strawberry sundae', short: '聖代', price: 65, dish: 'dessert', dc: '#f8f0e8', dt: '#d83040',
+    about: P('兩球香草冰淇淋，淋巧克力醬，放上大湖草莓。', 'Two scoops of vanilla ice cream, chocolate sauce, Dahu strawberries on top.'),
+    steps: [{ kind: 'scoop', item: 'icecream', n: 2 }, { kind: 'pour', item: 'chocsauce', ml: 20, tol: 8 }, { kind: 'scoop', item: 'freshberry', n: 3 }, { kind: 'serve' }] });
+  kf({ id: 'dumplings', zh: '兒童水餃（六顆）', en: 'Kids’ dumplings (6)', short: '小水餃', price: 45, dish: 'plate', dc: '#f8f0d8',
+    about: P('玉米豬肉水餃六顆，水滾下鍋，滾了點一次冷水再煮滾就撈起（小份量只要點兩次）。', 'Six corn-pork dumplings into boiling water; each time it boils add a splash of cold water, twice for a small portion, then lift out.'),
+    steps: [{ kind: 'heat', item: 'water', target: 100, tol: 3 }, { kind: 'pick', item: 'dpot', w: 1 }, { kind: 'scoop', item: 'jcorn', n: 6 }, { kind: 'scoop', item: 'splash', n: 2 }, { kind: 'steep', item: 'dpot', min: 5, tol: 1 }, { kind: 'do', item: 'drain' }, { kind: 'serve' }] });
   return out;
 }
 const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
 export const CATS = [
   { id: 'pure', zh: '純茶', en: 'Pure tea' }, { id: 'milk', zh: '奶茶', en: 'Milk tea' }, { id: 'latte', zh: '鮮奶茶', en: 'Fresh milk tea' }, { id: 'foam', zh: '奶蓋', en: 'Cheese foam' }, { id: 'fruit', zh: '果茶', en: 'Fruit tea' }, { id: 'special', zh: '特調', en: 'Specials' },
-  { id: 'dry', zh: '乾麵', en: 'Dry noodles' }, { id: 'soup', zh: '湯麵', en: 'Noodle soup' }, { id: 'rice', zh: '飯', en: 'Rice' }, { id: 'braise', zh: '滷味', en: 'Braised' }, { id: 'snack', zh: '煎台', en: 'Griddle' }, { id: 'dim', zh: '點心', en: 'Dim sum' }, { id: 'dessert', zh: '甜品', en: 'Desserts' },
+  { id: 'kids', zh: '兒童餐', en: 'Kids’ menu' }, { id: 'dry', zh: '乾麵', en: 'Dry noodles' }, { id: 'soup', zh: '湯麵', en: 'Noodle soup' }, { id: 'rice', zh: '飯', en: 'Rice' }, { id: 'braise', zh: '滷味', en: 'Braised' }, { id: 'snack', zh: '煎台', en: 'Griddle' }, { id: 'dim', zh: '點心', en: 'Dim sum' }, { id: 'dessert', zh: '甜品', en: 'Desserts' },
 ];
 // when each one opens up: easy ones first, the long recipes later (reputation)
 export function assignUnlocks(list) {
-  const catW = { pure: 0, milk: 1, fruit: 1, special: 2, latte: 2, dry: 1, braise: 1, rice: 1, snack: 2, foam: 3, soup: 3, dim: 3, dessert: 2 };
+  const catW = { kids: 0, pure: 0, milk: 1, fruit: 1, special: 2, latte: 2, dry: 1, braise: 1, rice: 1, snack: 2, foam: 3, soup: 3, dim: 3, dessert: 2 };
   const order = list.slice().sort((a, b) => (catW[a.cat] + (a.cx || 2) + a.steps.length * 0.12) - (catW[b.cat] + (b.cx || 2) + b.steps.length * 0.12) || a.id.localeCompare(b.id));
   order.forEach((p, i) => { p.unlock = Math.round(5000 * Math.pow(i / order.length, 1.5) / 10) * 10; });
 }

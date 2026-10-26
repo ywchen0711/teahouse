@@ -1,8 +1,8 @@
 // Alley Teahouse: learn each item by making it by hand, sell it, grow and decorate the shop, visit friends online.
-import { PRODUCTS, ITEMS, SIZES, TABLES, DECOR, WALLS, FLOORS, UPGRADES, TX, CATS } from './data.js?v=4';
-import { room, counter, street as streetArt, weather as weatherArt, lights, table, chair, seats, person, cup, dish, makeLook, particles, burst, finish, SLOTS, roomH, roomW, canvasH, spotsFor, spotShown, INK } from './art.js?v=4';
-import { make } from './make.js?v=3';
-import { Sim } from './sim.js?v=7';
+import { PRODUCTS, ITEMS, SIZES, TABLES, DECOR, WALLS, FLOORS, UPGRADES, TX, CATS } from './data.js?v=5';
+import { room, counter, street as streetArt, weather as weatherArt, lights, table, chair, seats, person, cup, dish, makeLook, particles, burst, finish, SLOTS, roomH, roomW, canvasH, spotsFor, spotShown, INK } from './art.js?v=5';
+import { make } from './make.js?v=5';
+import { Sim } from './sim.js?v=8';
 import { EVENTS, shuffled } from './events.js?v=1';
 import { PLACES, placeOf, SOUVENIRS, STAMPS, LOCAL_EVENTS, flagSvg } from './places.js?v=1';
 import { street, goOnline, update as netUpdate, like, send, online, waiting } from './net.js?v=3';
@@ -56,7 +56,7 @@ function placesDialog() {
 const BYID = new Map(PRODUCTS.map((p) => [p.id, p])), P = (id) => BYID.get(id);
 const menu = () => PRODUCTS.filter((p) => (S.best[p.id] || 0) >= 60);
 const money = (v) => 'NT$' + Math.round(v).toLocaleString();
-function save() { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { /* full */ } if (cloud) cloud.touch(GAME, KEY); netUpdate(snapshot()); }
+function save() { S.today = day && !day.done ? { ...day, dayNo: S.day } : null; try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { /* full */ } if (cloud) cloud.touch(GAME, KEY); netUpdate(snapshot()); }
 const ambience = (st = S) => st.tables.reduce((s, x) => s + (TABLES.find((y) => y.id === x.type)?.amb || 0), 0) + (st.decor || []).reduce((s, d) => s + (DECOR.find((y) => y.id === d.id)?.amb || 0), 0) + (st.wall !== 'cream' ? 5 : 0) + (st.floor !== 'plank' ? 4 : 0) + (st.up && st.up.cat ? 6 : 0);
 const snapshot = () => ({ place: S.place, n: S.shop || t().defShop(S.name || '?'), owner: S.name, rep: Math.round(S.rep), money: Math.round(S.money), size: S.size, tables: S.tables, decor: S.decor, wall: S.wall, floor: S.floor, menu: menu().map((p) => p.id), day: S.day, amb: ambience(), cat: S.up.cat, seed: S.seed, learned: menu().length, perfect: Object.values(S.best).filter((v) => v >= 100).length, sold: S.stats.sold, baskets: (S.baskets || []).filter((b) => b.day >= S.day - 1) });
 
@@ -90,7 +90,7 @@ function step(dt) {
   // chat (they don't hold up the day), and if anyone is still inside long after closing they are seen out
   if (day.closing) {
     day.closeT += dt; if (day.closeT > 90 && !day.shooed) { day.shooed = true; shop.closeUp(); }
-    if (!shop.guests.some((g) => !g.gone && !(g.friend && !g.vip && g.state !== 'leave')) || day.closeT > 120) { day.closing = false; dropCard(); setTimeout(summary, 400); }
+    if (!shop.guests.some((g) => !g.gone && !(g.friend && !g.vip && g.state !== 'leave')) || day.closeT > 120) { day.closing = false; dropCard(); const endDay = () => { if (making) { setTimeout(endDay, 500); return; } summary(); }; setTimeout(endDay, 400); }
   }
 }
 // a guest gets their order: they pay for it (more for a better one), tip by the shop's ambience, and are happy
@@ -112,7 +112,7 @@ function serve(g, score, byHand) {
 function pop(x, y, text, color) { fx.push({ kind: 'text', text, color, x, y, vx: 0, vy: -30, t: 0, life: 1.4, rot: 0, spin: 0 }); }
 function summary() {
   const T = t(), Q = pt(), d = day, pl = here(), rent = pl.rent, profit = d.sales + d.tips - d.costs - rent;
-  S.money -= rent;
+  S.money -= rent; d.done = true;
   const goalOk = d.goal >= pl.goal.n, gRep = 10, gMoney = 200 + rent; let souvNew = null;
   if (goalOk) { S.rep += gRep; S.money += gMoney; S.stamps[pl.id] = (S.stamps[pl.id] || 0) + 1; if (S.stamps[pl.id] >= STAMPS && !S.souv.includes(pl.souv.id)) { S.souv.push(pl.souv.id); souvNew = pl.souv; } }
   const newRep = Math.round(S.rep - d.rep0);
@@ -182,7 +182,7 @@ function start() {
   $('hCity').onclick = placesDialog;
   $('hLang').onclick = () => { S.lang = S.lang === 'zh' ? 'en' : 'zh'; save(); start(); };
   $('cv').onclick = canvasClick;
-  if (!day) newDay(); hud();
+  if (!day) { const td = S.today; if (td && td.dayNo === S.day && td.place === S.place && (td.open || td.closing)) { day = { ...td }; delete day.dayNo; shop.reset(); dropCard(); setTimeout(() => toast(t().resumed), 600); } else newDay(); } hud();
   goOnline(snapshot());
   // the very first time: learn the first drink before opening
   if (!menu().length) setTimeout(() => kitchen(true), 500);
@@ -245,11 +245,11 @@ function kitchen(first) {
 }
 function makeDialog(p, special) {
   return new Promise((ok) => {
-    const d = $('dlg'); d.classList.add('wide'); $('dlgBody').innerHTML = '<div id="mkHost"></div>'; if (!d.open) d.showModal();
-    let settled = false;
-    const close = () => { if (!settled) { settled = true; d.classList.remove('wide'); ok(null); } };
+    const d = $('dlg'); if (making && d.open) stash(); d.classList.add('wide'); $('dlgBody').innerHTML = '<div id="mkHost"></div>'; if (!d.open) d.showModal();
+    let settled = false; const me = {}; making = me;
+    const close = () => { if (!settled) { settled = true; if (making === me) making = null; under.length = 0; d.classList.remove('wide'); ok(null); } };
     d.addEventListener('close', close, { once: true });
-    make($('mkHost'), p, t(), S.lang, special).then((r) => { if (settled) return; settled = true; d.removeEventListener('close', close); d.classList.remove('wide'); if (r) { if (special) closeDialog(); ok(r); } else ok(null); });
+    make($('mkHost'), p, t(), S.lang, special).then((r) => { if (settled) return; settled = true; if (making === me) making = null; d.removeEventListener('close', close); d.classList.remove('wide'); if (r) { if (special) closeDialog(); ok(r); } else ok(null); });
   });
 }
 function result(p, r, was) {
@@ -283,7 +283,7 @@ function decorDialog() {
     <h4>${T.items}</h4><div class="cards">${DECOR.map((d) => { const Q = pt(), got = !d.from || S.souv.includes(d.id), put = d.from && S.decor.some((x) => x.id === d.id);
       return `<div class="pc ${got ? '' : 'lock'}"><canvas data-dc="${d.id}" width="80" height="80"></canvas><b>${d.from ? flagSvg(d.from) + ' ' : ''}${d[S.lang]}</b><small>${T.amb} +${d.amb}</small>${!got ? `<small>🔒 ${Q.souvLock(placeOf(d.from).name[S.lang])}</small>` : put ? `<small>✅ ${Q.placed}</small>` : `<button class="btn" data-dec="${d.id}">${d.from ? '🎁 ' + Q.souvFree : money(d.cost)}</button>`}</div>`; }).join('')}</div>
     ${S.decor.length ? `<div class="owned">${S.decor.map((d, i) => `<span>${DECOR.find((x) => x.id === d.id)[S.lang]} <button class="mini" data-rm="${i}">✕</button></span>`).join('')}</div>` : ''}`);
-  import('./art.js?v=4').then((A) => document.querySelectorAll('[data-dc]').forEach((c) => { const g = c.getContext('2d'), d = DECOR.find((x) => x.id === c.dataset.dc); A.decor(g, d.id, 40, d.spot === 'ceil' ? 0 : d.spot === 'wall' ? 40 : 76, 0); }));
+  import('./art.js?v=5').then((A) => document.querySelectorAll('[data-dc]').forEach((c) => { const g = c.getContext('2d'), d = DECOR.find((x) => x.id === c.dataset.dc); A.decor(g, d.id, 40, d.spot === 'ceil' ? 0 : d.spot === 'wall' ? 40 : 76, 0); }));
   document.querySelectorAll('[data-wall]').forEach((b) => b.onclick = () => { const w = WALLS.find((x) => x.id === b.dataset.wall); if (!S.walls.includes(w.id)) { if (!buy(w.cost)) return; S.walls.push(w.id); } S.wall = w.id; save(); hud(); decorDialog(); });
   document.querySelectorAll('[data-floor]').forEach((b) => b.onclick = () => { const f = FLOORS.find((x) => x.id === b.dataset.floor); if (!S.floors.includes(f.id)) { if (!buy(f.cost)) return; S.floors.push(f.id); } S.floor = f.id; save(); hud(); decorDialog(); });
   document.querySelectorAll('[data-dec]').forEach((b) => b.onclick = () => { const d = DECOR.find((x) => x.id === b.dataset.dec); if (S.money < d.cost) { toast(T.noMoney); return; } placing = d; closeDialog(); toast(S.lang === 'zh' ? '點一個綠色框框放上去' : 'Tap a green box to put it there'); });
@@ -477,8 +477,14 @@ street.on.duelDone = (m) => { if (duel && duel.id === m.id) { duel.theirs = m.sc
 setInterval(() => { for (const g of shop.guests) if (g.friend && !g.self && g.pingT && Date.now() - g.pingT > 70000) shop.friendLeave(g.friend); }, 10000);
 
 // ------------------------------------------------------------------ small things
-function dialog(html) { $('dlg').classList.remove('wide'); $('dlgBody').innerHTML = html; if (!$('dlg').open) $('dlg').showModal(); }
-function closeDialog() { if ($('dlg').open) $('dlg').close(); }
+let making = null; const under = [];
+function stash() { const d = $('dlg'), b = $('dlgBody'), keep = document.createDocumentFragment(); while (b.firstChild) keep.appendChild(b.firstChild); under.push({ keep, wide: d.classList.contains('wide'), making }); making = null; }
+function dialog(html) { if (making && $('dlg').open) stash(); $('dlg').classList.remove('wide'); $('dlgBody').innerHTML = html; if (!$('dlg').open) $('dlg').showModal(); }
+function closeDialog() {
+  if (under.length && $('dlg').open) { const u = under.pop(), b = $('dlgBody'); b.innerHTML = ''; b.appendChild(u.keep); $('dlg').classList.toggle('wide', u.wide); making = u.making; toast(t().backTo); return; }
+  if ($('dlg').open) $('dlg').close();
+}
+$('dlg').addEventListener('cancel', (e) => { if (under.length) { e.preventDefault(); closeDialog(); } });
 $('dlgX').onclick = closeDialog;
 function toast(msg) { const n = document.querySelectorAll('.toast').length, d = document.createElement('div'); d.className = 'toast'; d.style.top = 62 + n * 42 + 'px'; d.textContent = msg; document.body.appendChild(d); setTimeout(() => d.remove(), msg.length > 30 ? 4200 : 2600); }
 function loop(now) {
@@ -488,7 +494,9 @@ function loop(now) {
   if ($('cv')) { try { for (let k = 0; k < speed; k++) step(dt); } catch (e) { console.error(e); } draw(now); if (day && $('hProg')) $('hProg').style.width = Math.min(100, day.t / DAY * 100) + '%'; if (Math.random() < 0.02) hud(); }
 }
 requestAnimationFrame(loop);
-setInterval(() => { if (S.name) save(); }, 30000);
+setInterval(() => { if (S.name) save(); }, 10000);
+addEventListener('pagehide', () => { if (S.name) save(); });
+document.addEventListener('visibilitychange', () => { if (document.hidden && S.name) save(); });
 
 (async () => {
   start();

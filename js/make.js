@@ -2,8 +2,8 @@
 // right temperature (hold the kettle, let go at the number), brew for the right minutes, strain, add syrup by the pump,
 // pour to the line in ml, ice by the scoop, shake, seal. Every action is written down, then judged against the recipe:
 // the right thing, the right amount, in the right order (steps in one box may go any way round), nothing extra.
-import { ITEMS } from './data.js?v=4';
-import { cup, INK } from './art.js?v=4';
+import { ITEMS } from './data.js?v=5';
+import { cup, INK } from './art.js?v=5';
 
 const SWEET = [0, 0.3, 0.5, 0.7, 1], ICE = [0, 0.3, 0.7, 1];
 // what is on the shelves for this item: every base of its kind (you must know which one), the things the recipe
@@ -157,6 +157,8 @@ export function make(host, p, T, lang, special) {
     const tStep = recipe.find((s) => s.kind === 'heat'), sStep = recipe.find((s) => s.kind === 'steep');
     let last = performance.now();
     const frame = (now) => {
+      // put aside while something else is on screen (the page keeps it in a fragment): wait, frozen, until it comes back
+      if (!closed && !cv.isConnected && cv.getRootNode().nodeType === 11) { last = now; if (hold) endHold(); raf = requestAnimationFrame(frame); return; }
       if (closed || !cv.isConnected) { if (!closed) done(null); return; }
       const dt = Math.min(0.05, (now - last) / 1000); last = now;
       if (hold) {

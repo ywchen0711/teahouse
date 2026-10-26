@@ -10,7 +10,7 @@
 //   do     a hand step: strain the leaves, drain the noodles, swirl the cup…           { kind, item }
 //   shake  shake it a number of times (0 means: don't!)                                { kind, n }
 //   serve  seal / plate it and hand it over                                            { kind }
-import { MORE, generate, assignUnlocks, CATS } from './menu.js?v=5';
+import { MORE, generate, assignUnlocks, CATS } from './menu.js?v=6';
 export { CATS };
 const u = (zh, en) => ({ zh, en });
 export const ITEMS = {
@@ -129,7 +129,7 @@ const pick = (a) => a[Math.floor(Math.random() * a.length)];
 export const TX = {
   zh: {
     title: '巷口茶館', sub: 'ALLEY TEAHOUSE', tag: '開一間老派茶館：照食譜親手做出及格的飲料才能上架，賺錢擴店、佈置，到曼谷、東京、倫敦、巴黎、紐約開分店，和朋友互相拜訪', play: '開店', name: '你的名字', shopName: '茶館名字', defShop: (n) => `${n}的茶館`,
-    money: '錢', rep: '口碑', day: (d) => `第 ${d} 天`, open: '營業中', closed: '打烊', nextDay: '開門營業', summary: '今日結算', sold: '賣出', earned: '收入', costs: '成本', tips: '小費', guests: '客人', profit: '淨賺',
+    resumed: '↩️ 接著剛才的營業繼續', backTo: '↩️ 回到剛才做到一半的', money: '錢', rep: '口碑', day: (d) => `第 ${d} 天`, open: '營業中', closed: '打烊', nextDay: '開門營業', summary: '今日結算', sold: '賣出', earned: '收入', costs: '成本', tips: '小費', guests: '客人', profit: '淨賺',
     menu: '菜單', kitchen: '研發', shop: '擴店', decor: '佈置', street: '茶街', locked: (n) => `口碑 ${n} 解鎖`, learn: '研發', learned: '已上架', best: (s) => `最佳 ${s} 分`, test: '試做', retry: '再做一次',
     recipe: '食譜', steps: '步驟', score: '分數', pass: '及格！上架販賣', fail: '不及格，再試一次', grade: (s) => s >= 90 ? '完美！' : s >= 75 ? '很好喝' : s >= 60 ? '及格' : '不及格',
     tools: { pick: '拿取', heat: '煮水', steep: '沖泡', cook: '烹煮', scoop: '加料', pour: '倒入', do: '手作', shake: '搖', serve: '封膜出杯', serveFood: '裝盤上菜' },
@@ -181,7 +181,7 @@ export const TX = {
   },
   en: {
     title: 'Alley Teahouse', sub: '巷口茶館', tag: 'Run an old-style teahouse: make each drink by hand from its recipe until it passes before you can sell it; grow, decorate, open shops in Bangkok, Tokyo, London, Paris and New York, and visit friends online', play: 'Open the shop', name: 'Your name', shopName: 'Teahouse name', defShop: (n) => `${n}'s Teahouse`,
-    money: 'Money', rep: 'Reputation', day: (d) => `Day ${d}`, open: 'Open', closed: 'Closed', nextDay: 'Open for the day', summary: 'End of the day', sold: 'Sold', earned: 'Sales', costs: 'Ingredients', tips: 'Tips', guests: 'Guests', profit: 'Profit',
+    resumed: '↩️ Picking up the day where you left it', backTo: '↩️ Back to what you were making', money: 'Money', rep: 'Reputation', day: (d) => `Day ${d}`, open: 'Open', closed: 'Closed', nextDay: 'Open for the day', summary: 'End of the day', sold: 'Sold', earned: 'Sales', costs: 'Ingredients', tips: 'Tips', guests: 'Guests', profit: 'Profit',
     menu: 'Menu', kitchen: 'Kitchen', shop: 'Expand', decor: 'Decorate', street: 'Tea Street', locked: (n) => `Unlocks at ${n} reputation`, learn: 'Learn it', learned: 'On the menu', best: (s) => `Best ${s}`, test: 'Make it', retry: 'Make it again',
     recipe: 'Recipe', steps: 'Steps', score: 'Score', pass: 'Passed! It’s on the menu', fail: 'Not a pass yet: try again', grade: (s) => s >= 90 ? 'Perfect!' : s >= 75 ? 'Delicious' : s >= 60 ? 'A pass' : 'Not yet',
     tools: { pick: 'Take', heat: 'Heat water', steep: 'Brew', cook: 'Cook', scoop: 'Add', pour: 'Pour', do: 'By hand', shake: 'Shake', serve: 'Seal & serve', serveFood: 'Plate & serve' },
